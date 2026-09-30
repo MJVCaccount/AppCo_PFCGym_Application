@@ -1,4 +1,4 @@
-# PFC — Professional Fighting Championship
+# PFC - Professional Fighting Championship
 
 Next.js 15 front end for Task 2 (Code and Implementation), INSY7315 Work
 Integrated Learning.
@@ -98,7 +98,7 @@ token to get wrong.
 **Validation runs on the server, always.** `lib/validation.ts` holds the rules;
 every action runs them on submission and re-renders the form with per-field
 errors. The client components surface those errors instantly through
-`useActionState`, but the browser is never trusted — with JavaScript disabled
+`useActionState`, but the browser is never trusted, with JavaScript disabled
 the form still posts, still validates, and still shows errors.
 
 **The data layer is one seam.** Pages import from `lib/gym-data.ts` and
@@ -114,7 +114,7 @@ browser.
 
 ## Security
 
-**Passwords** are hashed with scrypt — deliberately slow and memory-hard, so a
+**Passwords** are hashed with scrypt, deliberately slow and memory-hard, so a
 stolen hash list resists offline brute force. Every account gets its own random
 salt, so two people choosing the same password still store different hashes.
 Comparison is fixed-time (`timingSafeEqual`), and an unknown email still runs
@@ -122,7 +122,7 @@ one hash before failing, so response timing cannot reveal which addresses are
 registered.
 
 **Sessions** are a cookie signed with HMAC-SHA256. Editing the payload to claim
-a different role breaks the signature and the session is rejected — there is a
+a different role breaks the signature and the session is rejected, there is a
 test for exactly this. The cookie is `httpOnly` (JavaScript cannot read it),
 `sameSite=lax` (not sent on cross-site POSTs, which blocks CSRF) and `secure`
 outside development.
@@ -138,7 +138,7 @@ node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"
 on this site, so a crafted login link cannot bounce a user elsewhere after
 signing in.
 
-**Failed logins are deliberately vague** — "Email or password is incorrect"
+**Failed logins are deliberately vague** - "Email or password is incorrect"
 rather than naming which was wrong, which would confirm that an address exists.
 
 ---
@@ -178,11 +178,11 @@ two are indistinguishable side by side but the button text becomes compliant.
 
 The 16 files in `public/images/` come from 29 photographs supplied by the
 client, cropped per slot, resized, contrast-lifted (the gym is dimly lit) and
-saved as progressive JPEG at quality 80 — roughly 1.7 MB in total. `next/image`
+saved as progressive JPEG at quality 80, roughly 1.7 MB in total. `next/image`
 serves them in modern formats at the size each breakpoint actually needs; the
 hero is marked `priority` and everything else lazy-loads.
 
-Every photograph is of the empty facility — the client supplied no photos of
+Every photograph is of the empty facility, the client supplied no photos of
 people. Coach cards therefore render a monogram built from the coach's name
 (`initials()` in `lib/types.ts`). If portraits arrive later, add an `imagePath`
 to the `Coach` type and swap the div in `CoachCard.tsx` for an `<Image>`.
@@ -201,7 +201,7 @@ npx tsx tests/logic.test.ts     # 43 checks: data, users, validation, formatting
 npx tsx tests/session.test.ts   #  9 checks: session signing and tamper resistance
 ```
 
-The session suite includes the important one — forging a payload to claim a
+The session suite includes the important one, forging a payload to claim a
 different role is rejected, because the signature no longer matches.
 
 ---
