@@ -1,9 +1,0 @@
-@{
-    var hasErrors = !ViewData.ModelState.IsValid;
-}
-@if (hasErrors)
-{
-    <p class="alert alert--err is-shown" role="alert">
-        Please fix the highlighted fields and try again.
-    </p>
-}
