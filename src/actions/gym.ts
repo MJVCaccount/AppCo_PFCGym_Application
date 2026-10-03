@@ -3,8 +3,9 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
-import { bookSlot, getPlan, getSlot } from "@/lib/gym-data";
+import { getPlan } from "@/lib/gym-data";
 import { getSession } from "@/lib/session";
+import { createBooking } from "@/lib/services/bookingService";
 import { setPlan } from "@/lib/users";
 import {
   type FormState,
@@ -22,18 +23,18 @@ export async function book(data: FormData): Promise<void> {
     redirect(`/login?returnUrl=${encodeURIComponent(`/timetable?day=${day}`)}`);
   }
 
-  const failure = bookSlot(id);
-  const slot = getSlot(id);
+  const result = createBooking(session, id);
 
   revalidatePath("/timetable");
   revalidatePath("/dashboard");
 
-  if (failure) {
-    redirect(`/timetable?day=${day}&error=${encodeURIComponent(failure)}`);
+  if (!result.ok) {
+    const message = result.error ?? "That class could not be booked.";
+    redirect(`/timetable?day=${day}&error=${encodeURIComponent(message)}`);
   }
 
-  const confirmation = slot
-    ? `Booked ${slot.className} at ${slot.startsAt} with ${slot.coachName}. A confirmation email is on its way.`
+  const confirmation = result.slot
+    ? `Booked ${result.slot.className} at ${result.slot.startsAt} with ${result.slot.coachName}. A confirmation email is on its way.`
     : "Class booked.";
 
   redirect(`/timetable?day=${day}&booked=${encodeURIComponent(confirmation)}`);
