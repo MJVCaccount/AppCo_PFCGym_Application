@@ -701,6 +701,23 @@ async function main() {
     assert.ok(RULES.message("hi"));
   });
 
+  await check("fighter and event rules enforce their trimmed length ranges", () => {
+    const ranges = [
+      ["weightClass", 2, 40],
+      ["eventName", 3, 120],
+      ["venue", 2, 120],
+      ["eventDescription", 10, 2000],
+    ] as const;
+
+    for (const [rule, min, max] of ranges) {
+      assert.equal(RULES[rule]("x".repeat(min)), null, `${rule} min`);
+      assert.equal(RULES[rule](`  ${"x".repeat(max)}  `), null, `${rule} max`);
+      assert.ok(RULES[rule]("x".repeat(min - 1)), `${rule} too short`);
+      assert.ok(RULES[rule]("x".repeat(max + 1)), `${rule} too long`);
+      assert.ok(RULES[rule](" ".repeat(max)), `${rule} blank`);
+    }
+  });
+
   await check("validate() collects only the failing fields", () => {
     const data = new FormData();
     data.set("fullName", "R");

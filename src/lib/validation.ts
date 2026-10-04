@@ -23,6 +23,11 @@ export const EMPTY_FORM_STATE: FormState = { ok: false };
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const PHONE_PATTERN = /^[+\d][\d\s()-]{8,}$/;
 
+function lengthBetween(value: string, min: number, max: number): boolean {
+  const length = value.trim().length;
+  return length >= min && length <= max;
+}
+
 export const RULES = {
   name(value: string): string | null {
     return value.trim().length >= 2 ? null : "Please enter your full name.";
@@ -52,6 +57,30 @@ export const RULES = {
     return value.trim().length >= 10
       ? null
       : "Tell us a little more — at least 10 characters.";
+  },
+
+  weightClass(value: string): string | null {
+    return lengthBetween(value, 2, 40)
+      ? null
+      : "Weight class must be 2 to 40 characters.";
+  },
+
+  eventName(value: string): string | null {
+    return lengthBetween(value, 3, 120)
+      ? null
+      : "Event name must be 3 to 120 characters.";
+  },
+
+  venue(value: string): string | null {
+    return lengthBetween(value, 2, 120)
+      ? null
+      : "Venue must be 2 to 120 characters.";
+  },
+
+  eventDescription(value: string): string | null {
+    return lengthBetween(value, 10, 2000)
+      ? null
+      : "Description must be 10 to 2000 characters.";
   },
 } as const;
 

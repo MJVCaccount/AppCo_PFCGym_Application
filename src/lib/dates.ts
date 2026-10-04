@@ -59,6 +59,35 @@ export function isoDate(date: Date): string {
   return date.toISOString().slice(0, 10);
 }
 
+const eventClock = new Intl.DateTimeFormat("en-GB", {
+  timeZone: GYM_TIME_ZONE,
+  weekday: "short",
+  year: "numeric",
+  month: "short",
+  day: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+  hourCycle: "h23",
+});
+
+/**
+ * "Sat 3 Oct 2026, 19:00" on the gym's clock, from a stored UTC instant.
+ *
+ * Built from parts rather than format(), so the punctuation is the same on
+ * every ICU version. An unreadable value comes back as an empty string.
+ */
+export function formatEventDate(value: string | Date): string {
+  const date = typeof value === "string" ? new Date(value) : value;
+  if (Number.isNaN(date.getTime())) return "";
+
+  const parts: Record<string, string> = {};
+  for (const part of eventClock.formatToParts(date)) {
+    parts[part.type] = part.value;
+  }
+
+  return `${parts.weekday} ${parts.day} ${parts.month} ${parts.year}, ${parts.hour}:${parts.minute}`;
+}
+
 /**
  * Whether a dated session has started, on the gym's clock. `sessionDate` is a
  * date-only value as nextOccurrence returns it. A class starting this very

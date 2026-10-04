@@ -9,7 +9,7 @@
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
-    "test": "node --conditions=react-server -r tsx/cjs tests/dates.test.ts && node --conditions=react-server -r tsx/cjs -r ./tests/support/register.cjs tests/session.test.ts && node --conditions=react-server -r tsx/cjs tests/logic.test.ts && node --conditions=react-server -r tsx/cjs -r ./tests/support/register.cjs tests/api.test.ts",
+    "test": "node --conditions=react-server -r tsx/cjs tests/dates.test.ts && node --conditions=react-server -r tsx/cjs -r ./tests/support/register.cjs tests/session.test.ts && node --conditions=react-server -r tsx/cjs tests/logic.test.ts && node --conditions=react-server -r tsx/cjs -r ./tests/support/register.cjs tests/api.test.ts && node --conditions=react-server -r tsx/cjs -r ./tests/support/register.cjs tests/fighters.test.ts",
     "postinstall": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:seed": "prisma db seed",

@@ -155,7 +155,98 @@ export interface SessionUser {
   role: Role;
 }
 
+export type Availability = "Pending" | "Accepted" | "Declined";
+
+export type BoutResult = "Win" | "Loss" | "Draw" | "NoContest";
+
+export const BOUT_RESULTS: readonly BoutResult[] = [
+  "Win",
+  "Loss",
+  "Draw",
+  "NoContest",
+];
+
+export type EventStatus = "Scheduled" | "Completed" | "Cancelled";
+
+/** A member who competes. The id is the member's (and the user's) id. */
+export interface Fighter {
+  id: number;
+  fullName: string;
+  weightClass: string;
+  wins: number;
+  losses: number;
+  draws: number;
+  imageUrl: string | null;
+}
+
+/** A competition the gym's fighters can be offered bouts at. */
+export interface CompetitionEvent {
+  id: number;
+  name: string;
+  /** ISO-8601 UTC instant. Show it with formatEventDate. */
+  eventDate: string;
+  venue: string;
+  description: string;
+  imageUrl: string | null;
+  status: EventStatus;
+}
+
+/** One fighter's bout offer for one event, with the answer and the result. */
+export interface BoutOffer {
+  id: number;
+  fighterId: number;
+  fighterName: string;
+  eventId: number;
+  eventName: string;
+  /** ISO-8601 UTC instant. */
+  eventDate: string;
+  venue: string;
+  eventStatus: EventStatus;
+  availability: Availability;
+  opponentName: string | null;
+  boutWeightClass: string | null;
+  boutNotes: string | null;
+  result: BoutResult | null;
+  resultNotes: string | null;
+  /** ISO-8601 UTC instant. */
+  offeredAt: string;
+  respondedAt: string | null;
+}
+
+/** A fighter's offers, grouped the way the dashboard shows them. */
+export interface FighterOffers {
+  fighter: Fighter;
+  /** Unanswered, for an event that is still to come. */
+  pending: BoutOffer[];
+  /** Accepted, for an event that is still to come. */
+  accepted: BoutOffer[];
+  /** Declined, for an event that is still to come, so it can be changed. */
+  declined: BoutOffer[];
+  /** Every offer whose event has happened or was cancelled, newest first. */
+  past: BoutOffer[];
+}
+
+/**
+ * What every fighter and event service function returns: `status` is the HTTP
+ * status the result maps to, and `error` is safe to show to the user.
+ */
+export interface ServiceResult<T> {
+  ok: boolean;
+  status: number;
+  error?: string;
+  data?: T;
+}
+
 // ---------------------------------------------------------------- helpers
+
+/** "3-1-0": wins, losses, draws. */
+export function formatRecord(fighter: {
+  wins: number;
+  losses: number;
+  draws: number;
+}): string {
+  return `${fighter.wins}-${fighter.losses}-${fighter.draws}`;
+}
 
 export function isFull(slot: TimetableSlot): boolean {
   return slot.booked >= slot.capacity;

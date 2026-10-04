@@ -7,6 +7,7 @@ import assert from "node:assert/strict";
 
 import {
   currentDayAndHour,
+  formatEventDate,
   hasSessionStarted,
   isoDate,
   nextOccurrence,
@@ -130,6 +131,32 @@ check("hasSessionStarted agrees with nextOccurrence", () => {
     const next = nextOccurrence("mon", startsAt, now);
     assert.equal(hasSessionStarted(next, startsAt, now), false, startsAt);
   }
+});
+
+console.log("\nEVENT DATES");
+
+check("formatEventDate shows a UTC instant on the Johannesburg clock", () => {
+  // Saturday 17:00 UTC = Saturday 19:00 SAST
+  assert.equal(
+    formatEventDate("2026-10-03T17:00:00.000Z"),
+    "Sat 3 Oct 2026, 19:00",
+  );
+  assert.equal(
+    formatEventDate(new Date("2026-10-03T17:00:00.000Z")),
+    "Sat 3 Oct 2026, 19:00",
+  );
+});
+
+check("formatEventDate rolls the date over when UTC is still the day before", () => {
+  // Thursday 31 December 23:30 UTC = Friday 1 January 01:30 SAST
+  assert.equal(
+    formatEventDate("2026-12-31T23:30:00.000Z"),
+    "Fri 1 Jan 2027, 01:30",
+  );
+});
+
+check("formatEventDate returns an empty string for an unreadable value", () => {
+  assert.equal(formatEventDate("not a date"), "");
 });
 
 console.log(`\n${passed} checks passed\n`);

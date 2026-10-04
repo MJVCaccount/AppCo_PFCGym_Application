@@ -540,6 +540,10 @@ h3{font-size:var(--fs-h3);letter-spacing:-.01em}
 .header__actions form,
 .dash__side form{display:inline-flex}
 
+/* an outline button was always an <a>; as a <button> it would otherwise take
+   the browser's light default background and hide its white label */
+button.btn--line{background:transparent}
+
 .day{
   display:inline-flex;align-items:center;text-decoration:none;
   min-height:44px;                       /* tap target, now that it is an <a> */
@@ -557,6 +561,17 @@ h3{font-size:var(--fs-h3);letter-spacing:-.01em}
 .dash__side .btn{text-align:center}
 
 .gallery a{display:contents}
+
+/* ---------- 23. Fighter dashboard ---------- */
+.fighter-record{font-size:40px;font-weight:900;letter-spacing:-.03em;margin-top:10px}
+
+.offer h3{font-size:20px;margin-top:4px}
+.offer__venue{color:var(--mut);font-size:13px;margin-top:6px}
+.offer__facts{display:grid;grid-template-columns:auto 1fr;gap:8px 16px;margin-top:16px;font-size:13px}
+.offer__facts dt{font-size:9px;letter-spacing:.12em;color:var(--mut-2);text-transform:uppercase;padding-top:3px}
+.offer__actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:18px}
+.offer__actions form{flex:1 1 140px}
+.offer__actions .btn{min-height:44px}   /* tap target */
 
 /* A <button> carries the browser's own background and font; the pill and
    burger styles assume neither, so reset them where a button wears one. */

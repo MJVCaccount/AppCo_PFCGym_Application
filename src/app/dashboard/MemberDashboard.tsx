@@ -8,10 +8,18 @@ import { findById } from "@/lib/repositories/usersRepository";
 import { DAY_NAMES, formatPrice, initials } from "@/lib/types";
 import type { SessionUser } from "@/lib/types";
 
+/**
+ * `roleLabel` and `children` exist for the fighter dashboard, which is this
+ * page with the fighter's own sections above the membership ones.
+ */
 export default async function MemberDashboard({
   session,
+  roleLabel = "Member",
+  children,
 }: {
   session: SessionUser;
+  roleLabel?: string;
+  children?: React.ReactNode;
 }) {
   const [user, next] = await Promise.all([
     findById(session.id),
@@ -41,13 +49,15 @@ export default async function MemberDashboard({
           </span>
           <span>
             <b>{session.fullName}</b>
-            <span>Member</span>
+            <span>{roleLabel}</span>
           </span>
         </div>
       </aside>
 
       <div className="dash__main">
         <div className="wrap">
+          {children}
+
           <div className="section-head section-head--row">
             <div>
               <p className="eyebrow">Account</p>
