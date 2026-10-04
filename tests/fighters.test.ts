@@ -47,6 +47,11 @@ import type { SessionUser } from "../src/lib/types";
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const BLOB_IMAGE = "https://abc123.public.blob.vercel-storage.com/poster.jpg";
 
+// State-changing routes check the Origin header against APP_URL, so these
+// requests come from the app's own address, as a browser's would.
+const ORIGIN = "https://pfc.test.invalid";
+process.env.APP_URL = ORIGIN;
+
 let passed = 0;
 async function check(label: string, fn: () => Promise<void> | void) {
   await fn();
@@ -63,7 +68,7 @@ async function sessionFor(email: string): Promise<SessionUser> {
 function jsonRequest(method: string, body?: unknown): Request {
   return new Request("http://localhost/api/test", {
     method,
-    headers: { "content-type": "application/json" },
+    headers: { "content-type": "application/json", origin: ORIGIN },
     body:
       body === undefined
         ? undefined

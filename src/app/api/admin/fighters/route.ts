@@ -1,11 +1,10 @@
 import {
-  INVALID_BODY,
-  jsonError,
   jsonResult,
   readJsonObject,
   withSession,
 } from "@/lib/api";
 import { promoteToFighter } from "@/lib/services/fighterService";
+import { assertSameOrigin } from "@/lib/origin";
 
 export const dynamic = "force-dynamic";
 
@@ -15,12 +14,16 @@ export const dynamic = "force-dynamic";
  * Admin only. Promotes a member to Fighter.
  */
 export async function POST(request: Request) {
+  const blocked = assertSameOrigin(request);
+  if (blocked) return blocked;
+
   return withSession(
     "POST /api/admin/fighters",
     "Could not promote the member.",
     async (session) => {
-      const body = await readJsonObject(request);
-      if (!body) return jsonError(INVALID_BODY, 400);
+      const read = await readJsonObject(request);
+      if (!read.ok) return read.response;
+      const body = read.body;
 
       return jsonResult(
         await promoteToFighter(session, body.memberId, body.weightClass),

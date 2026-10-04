@@ -290,3 +290,13 @@ model OpeningHours {
   opens  Int
   closes Int
 }
+
+/// Fixed-window counters for src/lib/rateLimit.ts. `key` is a hashed
+/// identifier, never an email or address in plain text.
+model RateLimitBucket {
+  key     String   @id
+  count   Int
+  resetAt DateTime
+
+  @@index([resetAt])
+}

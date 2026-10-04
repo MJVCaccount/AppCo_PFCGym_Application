@@ -1,0 +1,180 @@
+name: Deploy
+
+# Runs only after the CI workflow has finished successfully for a push:
+#   push to main    -> production (waits for the reviewer on the "production"
+#                      GitHub Environment)
+#   push to develop -> preview
+#
+# Vercel's own Git integration is switched off in vercel.json, so this file is
+# the only thing that ships code.
+#
+# MIGRATIONS RUN BEFORE THE NEW CODE GOES LIVE. For a short while the previous
+# release is therefore still serving traffic against the new schema, so every
+# migration must be backward compatible with the previous release: add columns
+# (nullable or with a default) in one release and start using them in the
+# next; stop using a column in one release and drop it in the one after.
+# Never rename or drop something the running release still reads.
+#
+# Note: GitHub runs a workflow_run workflow from the default branch, so this
+# file must be on main before a push to develop can trigger a preview.
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main, develop]
+
+permissions:
+  contents: read
+
+# One deploy per branch at a time, and a deploy that has started is never
+# cancelled halfway: a newer one waits its turn.
+concurrency:
+  group: deploy-${{ github.event.workflow_run.head_branch }}
+  cancel-in-progress: false
+
+env:
+  VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+  VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+jobs:
+  production:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'main'
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The exact commit CI passed on, not whatever main is by now.
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm i -g vercel@latest
+
+      - name: Pull Vercel project settings and production environment
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
+
+      - name: Build
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: vercel build --prod --token="$VERCEL_TOKEN"
+
+      # Before the new code goes live; see the note at the top of this file.
+      - name: Apply database migrations
+        env:
+          DATABASE_URL: ${{ secrets.PROD_DIRECT_URL }}
+          DIRECT_URL: ${{ secrets.PROD_DIRECT_URL }}
+        run: npx prisma migrate deploy
+
+      - name: Deploy
+        id: deploy
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          url="$(vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN")"
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+          echo "Deployed to $url"
+
+      - name: Smoke test
+        env:
+          DEPLOYMENT_URL: ${{ steps.deploy.outputs.url }}
+          BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+        run: |
+          # Only if Deployment Protection is on: pass the bypass secret from a
+          # file so it never appears in a command line.
+          : > headers.txt
+          if [ -n "$BYPASS_SECRET" ]; then
+            printf 'x-vercel-protection-bypass: %s\n' "$BYPASS_SECRET" > headers.txt
+          fi
+          curl --fail --silent --show-error \
+            --retry 6 --retry-delay 10 --retry-all-errors \
+            -H @headers.txt \
+            "$DEPLOYMENT_URL/api/health/ready"
+          rm -f headers.txt
+
+  preview:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'develop'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm i -g vercel@latest
+
+      - name: Pull Vercel project settings and preview environment
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: vercel pull --yes --environment=preview --token="$VERCEL_TOKEN"
+
+      - name: Build
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: vercel build --token="$VERCEL_TOKEN"
+
+      # Against the Neon dev branch, before the preview goes live; see the
+      # note at the top of this file.
+      - name: Apply database migrations
+        env:
+          DATABASE_URL: ${{ secrets.PREVIEW_DIRECT_URL }}
+          DIRECT_URL: ${{ secrets.PREVIEW_DIRECT_URL }}
+        run: npx prisma migrate deploy
+
+      - name: Deploy
+        id: deploy
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          url="$(vercel deploy --prebuilt --token="$VERCEL_TOKEN")"
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+          echo "Deployed to $url"
+
+      # Every preview deployment gets a new address, but APP_URL (the
+      # same-origin check on the JSON API) must be stable. When the repository
+      # variable PREVIEW_ALIAS is set, point that *.vercel.app name at this
+      # deployment; it must equal APP_URL in the Vercel Preview environment.
+      # The team comes from VERCEL_ORG_ID, which the CLI reads from the
+      # environment, so no --scope flag is needed.
+      - name: Point the preview alias at this deployment
+        if: vars.PREVIEW_ALIAS != ''
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          DEPLOYMENT_URL: ${{ steps.deploy.outputs.url }}
+          PREVIEW_ALIAS: ${{ vars.PREVIEW_ALIAS }}
+        run: vercel alias set "$DEPLOYMENT_URL" "$PREVIEW_ALIAS" --token="$VERCEL_TOKEN"
+
+      - name: Smoke test
+        env:
+          # The alias when there is one, otherwise the deployment's own address.
+          DEPLOYMENT_URL: ${{ vars.PREVIEW_ALIAS != '' && format('https://{0}', vars.PREVIEW_ALIAS) || steps.deploy.outputs.url }}
+          BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+        run: |
+          : > headers.txt
+          if [ -n "$BYPASS_SECRET" ]; then
+            printf 'x-vercel-protection-bypass: %s\n' "$BYPASS_SECRET" > headers.txt
+          fi
+          curl --fail --silent --show-error \
+            --retry 6 --retry-delay 10 --retry-all-errors \
+            -H @headers.txt \
+            "$DEPLOYMENT_URL/api/health/ready"
+          rm -f headers.txt

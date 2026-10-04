@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { isEmailConfigured } from "@/lib/env";
+import { checkLimit, currentClientIp, tooManyAttempts } from "@/lib/rateLimit";
 import { getSession } from "@/lib/session";
 import { cancelBooking, createBooking } from "@/lib/services/bookingService";
 import { submitEnquiry } from "@/lib/services/contactService";
@@ -26,6 +27,12 @@ export async function book(data: FormData): Promise<void> {
   const session = await getSession();
   if (!session) {
     redirect(`/login?returnUrl=${encodeURIComponent(`/timetable?day=${day}`)}`);
+  }
+
+  const limit = await checkLimit("booking", String(session.id));
+  if (!limit.allowed) {
+    const message = tooManyAttempts(limit.retryAfterSeconds);
+    redirect(`/timetable?day=${day}&error=${encodeURIComponent(message)}`);
   }
 
   const result = await createBooking(session, id);
@@ -149,6 +156,11 @@ export async function sendEnquiry(
       errors,
       values,
     };
+  }
+
+  const limit = await checkLimit("contact", await currentClientIp());
+  if (!limit.allowed) {
+    return { ok: false, message: tooManyAttempts(limit.retryAfterSeconds), values };
   }
 
   const result = await submitEnquiry({

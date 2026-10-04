@@ -23,3 +23,21 @@ const store = {
 export async function cookies() {
   return store;
 }
+
+// The request headers a server action would see. A test that cares about the
+// caller's address sets them with setTestRequestHeaders. Otherwise every call
+// comes from a fresh address, so the rate limits (which are per address) never
+// make one test depend on how many requests an earlier test made.
+let requestHeaders: Headers | null = null;
+let nextAddress = 1;
+
+export function setTestRequestHeaders(init: Record<string, string>): void {
+  requestHeaders = new Headers(init);
+}
+
+export async function headers() {
+  if (requestHeaders) return requestHeaders;
+
+  nextAddress += 1;
+  return new Headers({ "x-real-ip": `198.18.${nextAddress >> 8}.${nextAddress & 255}` });
+}

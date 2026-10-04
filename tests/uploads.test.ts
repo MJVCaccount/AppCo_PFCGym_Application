@@ -89,8 +89,13 @@ function multipart(
   for (const [name, value] of Object.entries(fields)) data.set(name, value);
   if (file) data.set("file", new File([new Uint8Array(file.bytes)], file.name, { type: file.type }));
 
-  return new Request("http://localhost/upload", { method: "POST", body: data, headers });
+  return new Request("http://localhost/upload", { method: "POST", body: data, headers: { origin: ORIGIN, ...headers } });
 }
+
+// State-changing routes check the Origin header against APP_URL, so these
+// requests come from the app's own address, as a browser's would.
+const ORIGIN = "https://pfc.test.invalid";
+process.env.APP_URL = ORIGIN;
 
 const params = (id: number | string) => ({ params: Promise.resolve({ id: String(id) }) });
 
@@ -485,7 +490,7 @@ async function main() {
 
     // Through the route, too.
     await createSession(otherFighter);
-    const viaRoute = await deleteRoute(new Request("http://localhost/x", { method: "DELETE" }), params(upload.id));
+    const viaRoute = await deleteRoute(new Request("http://localhost/x", { method: "DELETE", headers: { origin: ORIGIN } }), params(upload.id));
     assert.equal(viaRoute.status, 409);
     await destroySession();
   });
@@ -518,7 +523,7 @@ async function main() {
     );
     assert.equal(ok.status, 201);
     const created = (await ok.json()) as { data: { id: number } };
-    const removed = await deleteRoute(new Request("http://localhost/x", { method: "DELETE" }), params(created.data.id));
+    const removed = await deleteRoute(new Request("http://localhost/x", { method: "DELETE", headers: { origin: ORIGIN } }), params(created.data.id));
     assert.equal(removed.status, 200);
 
     await destroySession();

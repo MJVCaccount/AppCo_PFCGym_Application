@@ -29,6 +29,11 @@ import {
 import { createSession, destroySession } from "../src/lib/session";
 import type { DayKey, SessionUser, TimetableSlot } from "../src/lib/types";
 
+// State-changing routes check the Origin header against APP_URL, so these
+// requests come from the app's own address, as a browser's would.
+const ORIGIN = "https://pfc.test.invalid";
+process.env.APP_URL = ORIGIN;
+
 let passed = 0;
 async function check(label: string, fn: () => Promise<void> | void) {
   await fn();
@@ -49,14 +54,14 @@ function fillerEmail(n: number): string {
 function bookRequest(body: unknown): Request {
   return new Request("http://localhost/api/bookings", {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: { "content-type": "application/json", origin: ORIGIN },
     body: typeof body === "string" ? body : JSON.stringify(body),
   });
 }
 
 function cancelRequest(id: string | number) {
   return cancelRoute(
-    new Request(`http://localhost/api/bookings/${id}/cancel`, { method: "POST" }),
+    new Request(`http://localhost/api/bookings/${id}/cancel`, { method: "POST", headers: { origin: ORIGIN } }),
     { params: Promise.resolve({ id: String(id) }) },
   );
 }

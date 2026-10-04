@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { logger } from "@/lib/logger";
 import { cancelBooking } from "@/lib/services/bookingService";
 import { getSession } from "@/lib/session";
+import { assertSameOrigin } from "@/lib/origin";
 
 export const dynamic = "force-dynamic";
 
@@ -13,9 +14,12 @@ export const dynamic = "force-dynamic";
  * else's booking answers 404, the same as one that does not exist.
  */
 export async function POST(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const blocked = assertSameOrigin(request);
+  if (blocked) return blocked;
+
   try {
     const session = await getSession();
     if (!session) {

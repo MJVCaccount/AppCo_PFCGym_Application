@@ -1,5 +1,4 @@
 import {
-  INVALID_BODY,
   jsonError,
   jsonResult,
   pathId,
@@ -11,6 +10,7 @@ import {
   completeEvent,
   updateEvent,
 } from "@/lib/services/eventService";
+import { assertSameOrigin } from "@/lib/origin";
 
 export const dynamic = "force-dynamic";
 
@@ -27,12 +27,16 @@ export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const blocked = assertSameOrigin(request);
+  if (blocked) return blocked;
+
   return withSession(
     "PATCH /api/admin/events/[id]",
     "Could not update the event.",
     async (session) => {
-      const body = await readJsonObject(request);
-      if (!body) return jsonError(INVALID_BODY, 400);
+      const read = await readJsonObject(request);
+      if (!read.ok) return read.response;
+      const body = read.body;
 
       const eventId = pathId((await params).id);
 

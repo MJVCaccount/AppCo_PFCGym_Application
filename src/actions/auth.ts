@@ -18,6 +18,13 @@ import {
   toSessionUser,
   validateCredentials,
 } from "@/lib/repositories/usersRepository";
+import {
+  checkLimit,
+  clearLimit,
+  currentClientIp,
+  firstDenied,
+  tooManyAttempts,
+} from "@/lib/rateLimit";
 import { createSession, destroySession, getSession } from "@/lib/session";
 import type { Role, UserAccount } from "@/lib/types";
 import {
@@ -35,6 +42,23 @@ export async function login(
 
   if (Object.keys(errors).length > 0) {
     return { ok: false, errors, values };
+  }
+
+  // Five tries per ip+email and thirty per ip in a fixed 15 minutes. A wrong
+  // password and an unknown email count the same, so the limit tells an
+  // attacker nothing about which addresses have accounts.
+  const ip = await currentClientIp();
+  const loginId = `${ip}|${String(data.get("email")).trim().toLowerCase()}`;
+  const denied = firstDenied(
+    await checkLimit("loginIpEmail", loginId),
+    await checkLimit("loginIp", ip),
+  );
+  if (denied) {
+    return {
+      ok: false,
+      message: tooManyAttempts(denied.retryAfterSeconds),
+      values,
+    };
   }
 
   let user: UserAccount | null;
@@ -56,6 +80,9 @@ export async function login(
       values,
     };
   }
+
+  // The real owner is back in: forget the failed attempts for this ip+email.
+  await clearLimit("loginIpEmail", loginId);
 
   await createSession(toSessionUser(user));
   revalidatePath("/", "layout");
@@ -85,6 +112,17 @@ export async function register(
 
   if (Object.keys(errors).length > 0) {
     return { ok: false, errors, values };
+  }
+
+  const denied = firstDenied(
+    await checkLimit("register", await currentClientIp()),
+  );
+  if (denied) {
+    return {
+      ok: false,
+      message: tooManyAttempts(denied.retryAfterSeconds),
+      values,
+    };
   }
 
   const email = String(data.get("email"));
@@ -135,7 +173,8 @@ export async function register(
 
 /**
  * "Forgot password" form. The answer is always the same message, whether or
- * not the email has an account. A rate limiter belongs around this call.
+ * not the email has an account. Both limits are keyed on what the visitor
+ * typed, not on whether an account exists, so hitting one reveals nothing.
  */
 export async function requestPasswordReset(
   _prev: FormState,
@@ -147,6 +186,18 @@ export async function requestPasswordReset(
   const errors = validate(data, { email: "email" });
   if (Object.keys(errors).length > 0) return { ok: false, errors, values };
 
+  const denied = firstDenied(
+    await checkLimit("forgotIp", await currentClientIp()),
+    await checkLimit("forgotEmail", email.trim().toLowerCase()),
+  );
+  if (denied) {
+    return {
+      ok: false,
+      message: tooManyAttempts(denied.retryAfterSeconds),
+      values,
+    };
+  }
+
   const result = await requestReset(email);
   return { ok: true, message: result.data?.message ?? RESET_REQUESTED };
 }
@@ -156,6 +207,13 @@ export async function submitPasswordReset(
   _prev: FormState,
   data: FormData,
 ): Promise<FormState> {
+  const denied = firstDenied(
+    await checkLimit("resetIp", await currentClientIp()),
+  );
+  if (denied) {
+    return { ok: false, message: tooManyAttempts(denied.retryAfterSeconds) };
+  }
+
   const result = await resetPassword(
     String(data.get("token") ?? ""),
     String(data.get("password") ?? ""),

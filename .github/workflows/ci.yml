@@ -1,20 +1,75 @@
 name: CI
 
+# Every change is checked before it merges (pull requests) and again once it
+# lands (pushes to develop and main). deploy.yml starts only when this
+# workflow finishes successfully for a push.
 on:
   pull_request:
     branches: [develop, main]
+  push:
+    branches: [develop, main]
+
+# A newer push to the same branch or pull request makes the older run
+# pointless, so it is cancelled.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
 
 jobs:
-  build-and-test:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+
+  typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+
+  build:
+    runs-on: ubuntu-latest
+    # Placeholders only: the build does not connect to a database, and
+    # nothing here is a real credential.
+    env:
+      SESSION_SECRET: ci-placeholder-session-secret-40-chars-0
+      DATABASE_URL: postgresql://placeholder:placeholder@localhost:5432/placeholder
+      DIRECT_URL: postgresql://placeholder:placeholder@localhost:5432/placeholder
+      APP_URL: http://localhost:3000
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+
+  test:
     runs-on: ubuntu-latest
 
-    # Throwaway database for the test step. Nothing outside this job can
-    # reach it and it is discarded when the job ends.
+    # A throwaway Postgres for this job only. Tests never touch Neon in CI:
+    # nothing here holds a Neon address.
     services:
       postgres:
-        image: postgres:16-alpine
+        image: postgres:16
         env:
-          POSTGRES_PASSWORD: pfc_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: pfc_ci_password
           POSTGRES_DB: pfc_test
         ports:
           - 5432:5432
@@ -24,31 +79,45 @@ jobs:
           --health-timeout 5s
           --health-retries 10
 
+    # The test helper (tests/helpers/db.ts) refuses to run when
+    # TEST_DATABASE_URL names the same database as DATABASE_URL or DIRECT_URL,
+    # because the tests empty every table. So the app URLs name a second
+    # database, pfc_app, on the same container; `migrate deploy` below proves
+    # the migrations apply to an empty database, and the tests use pfc_test.
+    env:
+      SESSION_SECRET: ci-placeholder-session-secret-40-chars-0
+      DATABASE_URL: postgresql://postgres:pfc_ci_password@localhost:5432/pfc_app
+      DIRECT_URL: postgresql://postgres:pfc_ci_password@localhost:5432/pfc_app
+      TEST_DATABASE_URL: postgresql://postgres:pfc_ci_password@localhost:5432/pfc_test
+      APP_URL: http://localhost:3000
+
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: npm
+      - run: npm ci
 
-      - name: Install dependencies
-        run: npm ci
+      - name: Create the app database
+        run: psql "postgresql://postgres:pfc_ci_password@localhost:5432/pfc_test" -c 'CREATE DATABASE pfc_app'
 
-      - name: Lint
-        run: npm run lint
+      - name: Apply migrations
+        run: npx prisma migrate deploy
 
-      - name: Typecheck
-        run: npm run typecheck
+      - name: Tests
+        run: npm test
 
-      - name: Unit tests
-        run: npm run test
-        env:
-          SESSION_SECRET: ci-placeholder-secret
-          TEST_DATABASE_URL: postgresql://postgres:pfc_test@localhost:5432/pfc_test
-
-      - name: Build
-        run: npm run build
-        env:
-          SESSION_SECRET: ci-placeholder-secret
-          DATABASE_URL: postgresql://placeholder:placeholder@localhost:5432/placeholder
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      # Fails on a high or critical advisory in anything that ships. The
+      # "overrides" in package.json pin postcss (bundled inside next) and
+      # deepmerge-ts (inside prisma's config loader) to patched releases.
+      - run: npm audit --omit=dev --audit-level=high

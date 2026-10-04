@@ -15,6 +15,7 @@ import type { Day, Role } from "@prisma/client";
 
 import { nextOccurrence } from "../src/lib/dates";
 import { hashPassword } from "../src/lib/password";
+import { checkSeedTarget } from "./seedGuard";
 
 const prisma = new PrismaClient();
 
@@ -311,6 +312,11 @@ async function upsertEvent(input: {
 // ---------------------------------------------------------------- seed
 
 async function main() {
+  // Before anything connects: refuse a database that is not on the allow-list.
+  const target = checkSeedTarget(process.env);
+  if (!target.ok) throw new Error(target.message);
+  console.log(`Seeding ${target.host}`);
+
   const now = new Date();
 
   // Catalogue

@@ -1,12 +1,11 @@
 import {
-  INVALID_BODY,
-  jsonError,
   jsonResult,
   pathId,
   readJsonObject,
   withSession,
 } from "@/lib/api";
 import { offerBout } from "@/lib/services/eventService";
+import { assertSameOrigin } from "@/lib/origin";
 
 export const dynamic = "force-dynamic";
 
@@ -20,12 +19,16 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const blocked = assertSameOrigin(request);
+  if (blocked) return blocked;
+
   return withSession(
     "POST /api/admin/events/[id]/offers",
     "Could not create the offer.",
     async (session) => {
-      const body = await readJsonObject(request);
-      if (!body) return jsonError(INVALID_BODY, 400);
+      const read = await readJsonObject(request);
+      if (!read.ok) return read.response;
+      const body = read.body;
 
       const { id } = await params;
       return jsonResult(

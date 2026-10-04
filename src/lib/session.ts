@@ -1,11 +1,15 @@
 import "server-only";
 
-import { createHmac, timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
 import { cache } from "react";
 
 import { getSessionState } from "./repositories/usersRepository";
-import { ROLES } from "./types";
+import {
+  COOKIE_NAME,
+  decodeSession,
+  encodeSession,
+  MAX_AGE_SECONDS,
+} from "./sessionToken";
 import type { Role, SessionUser } from "./types";
 
 /**
@@ -27,73 +31,6 @@ import type { Role, SessionUser } from "./types";
  * cookie issued before it. A cookie with no `sv` is invalid.
  */
 
-const COOKIE_NAME = "pfc_session";
-const MAX_AGE_SECONDS = 60 * 60 * 8; // 8 hours
-const ALLOWED_ROLES: readonly string[] = Object.values(ROLES);
-
-function secret(): string {
-  const fromEnv = process.env.SESSION_SECRET;
-
-  if (fromEnv && fromEnv.length >= 32) return fromEnv;
-
-  if (process.env.NODE_ENV === "production") {
-    throw new Error(
-      "SESSION_SECRET must be set to at least 32 characters in production. " +
-        "Generate one with: node -e \"console.log(require('crypto').randomBytes(48).toString('base64url'))\"",
-    );
-  }
-
-  // Development only. Restarting the server invalidates existing sessions,
-  // which is fine locally and never reaches a deployed environment.
-  return "pfc-development-only-secret-do-not-use-in-production";
-}
-
-function sign(payload: string): string {
-  return createHmac("sha256", secret()).update(payload).digest("base64url");
-}
-
-interface SessionPayload extends SessionUser {
-  sv: number;
-}
-
-function encode(user: SessionUser, sv: number): string {
-  const payload = Buffer.from(JSON.stringify({ ...user, sv })).toString(
-    "base64url",
-  );
-  return `${payload}.${sign(payload)}`;
-}
-
-function decode(token: string): SessionPayload | null {
-  const [payload, signature] = token.split(".");
-  if (!payload || !signature) return null;
-
-  const expected = Buffer.from(sign(payload));
-  const provided = Buffer.from(signature);
-
-  if (expected.length !== provided.length) return null;
-  if (!timingSafeEqual(expected, provided)) return null;
-
-  try {
-    const parsed = JSON.parse(
-      Buffer.from(payload, "base64url").toString("utf8"),
-    ) as SessionPayload;
-
-    if (
-      typeof parsed?.id !== "number" ||
-      typeof parsed?.email !== "string" ||
-      typeof parsed?.fullName !== "string" ||
-      !Number.isInteger(parsed?.sv) ||
-      !ALLOWED_ROLES.includes(parsed?.role)
-    ) {
-      return null;
-    }
-
-    return parsed;
-  } catch {
-    return null;
-  }
-}
-
 // ---------------------------------------------------------------- API
 
 export async function createSession(user: SessionUser): Promise<void> {
@@ -102,7 +39,7 @@ export async function createSession(user: SessionUser): Promise<void> {
   // cookie is tied to.
   const state = await getSessionState(user.id);
 
-  store.set(COOKIE_NAME, encode(user, state?.sessionVersion ?? 0), {
+  store.set(COOKIE_NAME, encodeSession(user, state?.sessionVersion ?? 0), {
     httpOnly: true,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
@@ -135,7 +72,7 @@ const loadSessionState = cache(getSessionState);
 export async function getSession(): Promise<SessionUser | null> {
   const store = await cookies();
   const token = store.get(COOKIE_NAME)?.value;
-  const claimed = token ? decode(token) : null;
+  const claimed = token ? decodeSession(token) : null;
   if (!claimed) return null;
 
   const state = await loadSessionState(claimed.id);

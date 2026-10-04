@@ -28,9 +28,8 @@ import { RULES } from "@/lib/validation";
  * A token is 32 random bytes, sent as base64url in a link. The database keeps
  * only its sha256 hash, so a leaked table cannot be used to reset anyone.
  *
- * Rate limiting is deliberately not here yet. requestReset and resetPassword
- * are single entry points, so a limiter can wrap each call where the action
- * makes it (as it can wrap login).
+ * Rate limiting is not here: the form actions in src/actions/auth.ts apply it
+ * (3 per hour per address and per email to ask, 10 per hour to reset).
  */
 
 export const RESET_TOKEN_MINUTES = 60;

@@ -2,7 +2,10 @@ import "server-only";
 
 import { NextResponse } from "next/server";
 
+import { readJson } from "@/lib/json";
 import { logger } from "@/lib/logger";
+import type { RateLimitResult } from "@/lib/rateLimit";
+import { isRecord } from "@/lib/services/serviceResult";
 import { getSession } from "@/lib/session";
 import type { ServiceResult, SessionUser } from "@/lib/types";
 
@@ -28,22 +31,30 @@ export function jsonResult<T>(result: ServiceResult<T>): NextResponse {
 }
 
 /**
- * The request body as a plain JSON object. Invalid JSON, an array, a string
- * or a number all come back as null, for the caller to answer with a 400.
+ * The request body as a plain JSON object, read with the size, Content-Type
+ * and syntax checks of readJson. On failure `response` is the 415, 413 or
+ * 400 to return as it is; an array, string or number is a 400 too.
  */
 export async function readJsonObject(
   request: Request,
-): Promise<JsonObject | null> {
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
-    return null;
+): Promise<
+  { ok: true; body: JsonObject } | { ok: false; response: NextResponse }
+> {
+  const read = await readJson(request);
+  if (!read.ok) return read;
+
+  if (!isRecord(read.data)) {
+    return { ok: false, response: jsonError(INVALID_BODY, 400) };
   }
 
-  return typeof body === "object" && body !== null && !Array.isArray(body)
-    ? (body as JsonObject)
-    : null;
+  return { ok: true, body: read.data };
+}
+
+/** The 429 for a denied rate-limit result, with a Retry-After header. */
+export function rateLimitedResponse(result: RateLimitResult): NextResponse {
+  const response = jsonError("Too many requests. Try again later.", 429);
+  response.headers.set("Retry-After", String(result.retryAfterSeconds));
+  return response;
 }
 
 export const INVALID_BODY = "Request body must be a JSON object.";

@@ -1,12 +1,11 @@
 import {
-  INVALID_BODY,
-  jsonError,
   jsonResult,
   pathId,
   readJsonObject,
   withSession,
 } from "@/lib/api";
 import { recordResult } from "@/lib/services/eventService";
+import { assertSameOrigin } from "@/lib/origin";
 
 export const dynamic = "force-dynamic";
 
@@ -21,12 +20,16 @@ export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const blocked = assertSameOrigin(request);
+  if (blocked) return blocked;
+
   return withSession(
     "PATCH /api/admin/participations/[id]/result",
     "Could not record the result.",
     async (session) => {
-      const body = await readJsonObject(request);
-      if (!body) return jsonError(INVALID_BODY, 400);
+      const read = await readJsonObject(request);
+      if (!read.ok) return read.response;
+      const body = read.body;
 
       const { id } = await params;
       return jsonResult(

@@ -15,6 +15,8 @@ import path from "node:path";
 
 import { PrismaClient } from "@prisma/client";
 
+import { hostOf } from "../../prisma/seedGuard";
+
 const ROOT = path.resolve(__dirname, "..", "..");
 
 try {
@@ -80,6 +82,9 @@ function resolveTestUrl(): string {
 const testUrl = resolveTestUrl();
 process.env.DATABASE_URL = testUrl;
 process.env.DIRECT_URL = testUrl;
+// The seed refuses databases it does not know; the test database is one it
+// should seed, and it is the only one this file ever points it at.
+process.env.SEED_CONFIRM_HOST = hostOf(testUrl) ?? "";
 
 /** Direct access for fixtures and for asserting on stored rows. */
 export const testDb = new PrismaClient({ datasourceUrl: testUrl });

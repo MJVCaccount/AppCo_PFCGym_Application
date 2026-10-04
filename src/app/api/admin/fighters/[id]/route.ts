@@ -1,5 +1,6 @@
 import { jsonResult, pathId, withSession } from "@/lib/api";
 import { demoteFighter } from "@/lib/services/fighterService";
+import { assertSameOrigin } from "@/lib/origin";
 
 export const dynamic = "force-dynamic";
 
@@ -10,9 +11,12 @@ export const dynamic = "force-dynamic";
  * fighter has any bout offer or document.
  */
 export async function DELETE(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const blocked = assertSameOrigin(request);
+  if (blocked) return blocked;
+
   return withSession(
     "DELETE /api/admin/fighters/[id]",
     "Could not demote the fighter.",

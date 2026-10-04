@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
 
-import { jsonError, withSession } from "@/lib/api";
+import { jsonError, rateLimitedResponse, withSession } from "@/lib/api";
 import { uploadPublicImage } from "@/lib/services/imageService";
+import { assertSameOrigin } from "@/lib/origin";
+import { checkLimit } from "@/lib/rateLimit";
 
 export const dynamic = "force-dynamic";
 
@@ -12,10 +14,16 @@ export const dynamic = "force-dynamic";
  * answers { url }, which the form puts in its image field.
  */
 export async function POST(request: Request) {
+  const blocked = assertSameOrigin(request);
+  if (blocked) return blocked;
+
   return withSession(
     "POST /api/admin/uploads/image",
     "Could not upload the image.",
     async (session) => {
+      const limit = await checkLimit("upload", String(session.id));
+      if (!limit.allowed) return rateLimitedResponse(limit);
+
       const result = await uploadPublicImage(session, request);
 
       if (!result.ok || !result.data) {

@@ -9,13 +9,15 @@
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
-    "test": "node --conditions=react-server -r tsx/cjs tests/dates.test.ts && node --conditions=react-server -r tsx/cjs -r ./tests/support/register.cjs tests/session.test.ts && node --conditions=react-server -r tsx/cjs tests/logic.test.ts && node --conditions=react-server -r tsx/cjs -r ./tests/support/register.cjs tests/api.test.ts && node --conditions=react-server -r tsx/cjs -r ./tests/support/register.cjs tests/fighters.test.ts && node --conditions=react-server -r tsx/cjs -r ./tests/support/register.cjs tests/admin.test.ts && node --conditions=react-server -r tsx/cjs -r ./tests/support/register.cjs tests/hostile-input.test.ts && node --conditions=react-server -r tsx/cjs -r ./tests/support/register.cjs tests/email.test.ts && node --conditions=react-server -r tsx/cjs -r ./tests/support/register.cjs tests/password.test.ts && node --conditions=react-server -r tsx/cjs -r ./tests/support/register.cjs tests/uploads.test.ts",
+    "test": "node --conditions=react-server -r tsx/cjs tests/dates.test.ts && node --conditions=react-server -r tsx/cjs -r ./tests/support/register.cjs tests/session.test.ts && node --conditions=react-server -r tsx/cjs tests/logic.test.ts && node --conditions=react-server -r tsx/cjs -r ./tests/support/register.cjs tests/api.test.ts && node --conditions=react-server -r tsx/cjs -r ./tests/support/register.cjs tests/fighters.test.ts && node --conditions=react-server -r tsx/cjs -r ./tests/support/register.cjs tests/admin.test.ts && node --conditions=react-server -r tsx/cjs -r ./tests/support/register.cjs tests/hostile-input.test.ts && node --conditions=react-server -r tsx/cjs -r ./tests/support/register.cjs tests/email.test.ts && node --conditions=react-server -r tsx/cjs -r ./tests/support/register.cjs tests/password.test.ts && node --conditions=react-server -r tsx/cjs -r ./tests/support/register.cjs tests/uploads.test.ts && node --conditions=react-server -r tsx/cjs -r ./tests/support/register.cjs tests/security.test.ts && node --conditions=react-server -r tsx/cjs tests/seed-guard.test.ts",
     "postinstall": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:seed": "prisma db seed",
     "db:reset": "prisma migrate reset --force",
     "db:deploy": "prisma migrate deploy",
-    "db:counts": "tsx prisma/counts.ts"
+    "db:counts": "tsx prisma/counts.ts",
+    "smoke": "node scripts/smoke.mjs",
+    "ci": "npm run lint && npm run typecheck && npm test && npm run build"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
@@ -38,5 +40,9 @@
     "prisma": "^6.19.3",
     "tsx": "4.20.3",
     "typescript": "5.8.3"
+  },
+  "overrides": {
+    "postcss": "^8.5.28",
+    "deepmerge-ts": "^8.0.2"
   }
 }

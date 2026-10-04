@@ -141,6 +141,54 @@ signing in.
 **Failed logins are deliberately vague** - "Email or password is incorrect"
 rather than naming which was wrong, which would confirm that an address exists.
 
+
+### Request hardening
+
+**XSS (cross-site scripting).** Two layers. React escapes every value it
+renders, and the code never uses `dangerouslySetInnerHTML`, so text a user
+types is shown as text. Second, `src/middleware.ts` sends a
+`Content-Security-Policy` with a fresh nonce on every request:
+`script-src 'self' 'nonce-…' 'strict-dynamic'`. A script that someone manages to
+inject has no nonce, so the browser refuses to run it; inline event handlers
+and `javascript:` URLs are refused for the same reason. `object-src 'none'`,
+`base-uri 'self'`, `form-action 'self'` and `frame-ancestors 'none'` close the
+other injection routes, and `unsafe-eval` exists in development only. (Checked
+in a real browser: an injected inline script and an injected `onerror` handler
+are both blocked, and every page loads with no policy violations.) If a new
+page ever trips the policy, set `CSP_REPORT_ONLY=1` to log violations instead of
+blocking while you fix it.
+
+**Security headers** on every response (`next.config.mjs`): HSTS for two
+years, `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`,
+`Referrer-Policy: strict-origin-when-cross-origin`, and a `Permissions-Policy`
+that switches off camera, microphone, geolocation and payment.
+
+**Route gate.** `middleware.ts` (Node.js runtime, no database call) checks the
+session cookie's signature before `/dashboard`, `/bookings`, `/admin` and
+`/coach` render, and the role for `/admin` and `/coach`. It is defence in depth:
+`getSession()`, the pages and the services still make the real decision, using
+the database.
+
+**CSRF on the JSON API.** Every POST, PATCH and DELETE route first calls
+`assertSameOrigin`: the `Origin` (or `Referer`) must match the host in
+`APP_URL`, or the answer is 403. Server actions rely on Next's own origin check.
+
+**Rate limiting** lives in Postgres (`RateLimitBucket`), one atomic
+`INSERT … ON CONFLICT DO UPDATE`, so it holds across serverless instances with
+no Redis. Keys are SHA-256 hashes, so no email or address is stored in plain
+text. Limits: login 5 per 15 min per ip+email and 30 per 15 min per ip (a
+successful login clears the ip+email bucket), register 5/h, forgot-password
+3/h per ip and per email, reset-password 10/h, contact form 5/h, bookings 30
+per 10 min per user, uploads 20/h per user. If the database is down the limiter
+fails open for public pages and closed for sign-in and password flows.
+
+**Request bodies.** `readJson` rejects a non-JSON Content-Type (415), a body over
+100,000 bytes (413) and invalid JSON (400) before any route logic runs.
+
+**Errors.** `global-error.tsx` and `error.tsx` show a fixed message; the real
+error is logged by `src/lib/logger.ts`. No route returns a stack trace, and
+`/api/health/ready` answers `{ "status": "unavailable" }` with no detail.
+
 ---
 
 ## Accessibility
@@ -206,12 +254,117 @@ different role is rejected, because the signature no longer matches.
 
 ---
 
-## Still to do for Part 2
+## Deployment
 
-- **Database.** `gym-data.ts` and `users.ts` hold seeded arrays. Replace with Prisma or Drizzle plus migrations. Until then, bookings and new registrations survive navigation but reset when the server restarts.
-- **Booking concurrency.** `bookSlot` checks capacity then increments. Two simultaneous bookings for the last place could both succeed; the database version must re-check inside a transaction.
-- **Contact form** logs and discards. Needs persistence plus an email send.
-- **Attendance and billing figures** on the member dashboard are placeholders.
-- **Admin CRUD** — the dashboard lists users and classes but cannot edit them.
-- **Route middleware.** Pages guard themselves with `requireSession`, which is the authoritative check. A `middleware.ts` would add defence in depth, but the session HMAC uses `node:crypto`, so it needs the Node middleware runtime rather than Edge.
-- **Hosting and CI/CD.** Vercel or Azure Static Web Apps, plus a GitHub Actions workflow that builds, typechecks and runs the tests.
+GitHub Actions is the only thing that ships code. Vercel's own Git integration
+is switched off (`vercel.json` sets `git.deploymentEnabled` to `false`), so the
+pipeline described here is the pipeline that runs.
+
+### Branches
+
+| Branch | Purpose | Gets deployed to |
+| --- | --- | --- |
+| `feature/*` | One piece of work, opened as a pull request into `develop` | nothing (CI only) |
+| `develop` | Integration branch | Vercel **preview**, against the Neon `dev` branch |
+| `main` | Released code | Vercel **production**, against the Neon `main` branch, after a reviewer approves |
+
+### Workflows
+
+**`.github/workflows/ci.yml`** runs on every pull request to `develop` or
+`main` and on every push to them. One job per concern, so a failure says what
+broke: `lint`, `typecheck`, `build`, `test` (a throwaway `postgres:16`
+container, `prisma migrate deploy`, then `npm test`; never a real Neon
+database) and `audit` (`npm audit --omit=dev --audit-level=high`). A newer push
+to the same ref cancels the older run.
+
+**`.github/workflows/deploy.yml`** starts only when CI has finished
+successfully for a push (`workflow_run`). For `main`: pull the production
+settings, `vercel build --prod`, `prisma migrate deploy`, `vercel deploy
+--prebuilt --prod`, then a smoke test that must get a 200 from
+`/api/health/ready`. The job uses the `production` GitHub Environment, which
+holds it until a required reviewer approves. For `develop` it does the same
+against preview. Deploys never cancel each other half-way: one runs at a time
+per branch and the next waits.
+
+```mermaid
+flowchart LR
+    F[feature branch] --> PR[pull request]
+    PR --> CI{{"CI checks<br/>lint, typecheck, build,<br/>test, audit"}}
+    CI -->|all green, merge| D[develop]
+    D --> CI2{{"CI on push<br/>(test gate)"}}
+    CI2 --> M1[/"prisma migrate deploy<br/>(Neon dev)"/]
+    M1 --> P[Vercel preview]
+    P --> SM1[smoke test<br/>/api/health/ready]
+    D -->|release PR, CI green, merge| MAIN[main]
+    MAIN --> CI3{{"CI on push<br/>(test gate)"}}
+    CI3 --> AP[/"reviewer approval<br/>(production environment)"/]
+    AP --> M2[/"prisma migrate deploy<br/>(Neon main)"/]
+    M2 --> PROD[Vercel production]
+    PROD --> SM2[smoke test<br/>/api/health/ready]
+```
+
+### Secrets and environment variables
+
+GitHub secrets (Settings, Secrets and variables, Actions):
+
+| Name | Where it is set | Purpose |
+| --- | --- | --- |
+| `VERCEL_TOKEN` | GitHub secret | Lets the Vercel CLI pull settings, build and deploy |
+| `VERCEL_ORG_ID` | GitHub secret | Vercel team or account id, from `.vercel/project.json` after `vercel link` |
+| `VERCEL_PROJECT_ID` | GitHub secret | Vercel project id, from the same file |
+| `PROD_DIRECT_URL` | GitHub secret | Neon `main` **direct** (non-pooled) string, used only by `prisma migrate deploy` in the production job |
+| `PREVIEW_DIRECT_URL` | GitHub secret | Neon `dev` **direct** string, used only by `prisma migrate deploy` in the preview job |
+| `VERCEL_AUTOMATION_BYPASS_SECRET` | GitHub secret, optional | Only if Vercel Deployment Protection is on: lets the smoke test past it |
+
+GitHub **variable** (same page, Variables tab):
+
+| Name | Where it is set | Purpose |
+| --- | --- | --- |
+| `PREVIEW_ALIAS` | GitHub variable, optional | A `*.vercel.app` name (e.g. `pfc-gym-preview.vercel.app`) that the preview job points at each new preview deployment. It must equal `APP_URL` in the Preview environment, so the same-origin check keeps working. When unset, no alias is made |
+
+The app's own variables are set in Vercel (Project, Settings, Environment
+Variables), separately for Production and Preview. `.env.example` documents
+each one: `SESSION_SECRET`, `DATABASE_URL` (pooled), `DIRECT_URL`, `APP_URL`,
+`RESEND_API_KEY`, `EMAIL_FROM`, `CONTACT_INBOX`, `PUBLIC_BLOB_STORE_ID`,
+`PRIVATE_BLOB_STORE_ID`, and optionally `CSP_REPORT_ONLY`. `TEST_DATABASE_URL`
+is for local `npm test` only; CI provides its own. `APP_URL` must be the
+address the browser uses, because the same-origin check on the JSON API
+compares the request's `Origin` with it. Preview deployments get a new URL
+each time, so set `PREVIEW_ALIAS` and use it as `APP_URL` in the Preview
+environment. For SEED_* and everything else, see [docs/OPERATIONS.md](docs/OPERATIONS.md).
+
+Nothing secret is ever echoed: the token is read from the environment by the
+CLI, the bypass header goes through a file, and GitHub masks secret values in
+logs.
+
+### Seeding and the smoke test
+
+`npm run db:seed` refuses any database that is not localhost, listed in
+`SEED_ALLOWED_HOSTS` (put the Neon dev host there in `.env`) or named in
+`SEED_CONFIRM_HOST`, which you set for a single command to seed production once
+(the command is in docs/OPERATIONS.md). The seed prints only the host.
+
+`npm run smoke -- <baseUrl> [--expect-seed]` checks a running deployment:
+health, security headers and CSP, the sign-in redirects, the same-origin
+refusal, public API shape, the reset-link headers, a clean 404 and the
+http-to-https redirect. It exits 1 on any failure. Set `SMOKE_BYPASS_SECRET` if
+Deployment Protection is on.
+
+### The migration rule
+
+Migrations run **before** the new code goes live, so for a short while the
+previous release is serving traffic against the new schema. Every migration
+must therefore be backward compatible with the previous release: add a column
+(nullable or with a default) in one release and start using it in the next;
+stop using a column in one release and drop it in the one after. Never rename
+or drop something the running release still reads.
+
+### Rolling back
+
+Redeploy the previous Vercel deployment: in the Vercel dashboard open
+Deployments, pick the last good one and choose "Promote to Production" (or run
+`vercel rollback`). That restores the old code in seconds. Migrations only move
+forward and are not undone, which is why the rule above matters: the old code
+has to keep working on the new schema. To undo a schema change, ship a new
+migration that reverses it.
+
