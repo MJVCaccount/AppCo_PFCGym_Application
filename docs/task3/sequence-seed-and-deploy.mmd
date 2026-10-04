@@ -1,0 +1,59 @@
+%% Source: .github/workflows/ci.yml, .github/workflows/deploy.yml, vercel.json,
+%% prisma/seed.ts (main), prisma/seedGuard.ts, scripts/smoke.mjs, docs/OPERATIONS.md ("Seeding production once"),
+%% tests/helpers/db.ts (the test database is seeded by the tests).
+%% The seed is NOT a step of either workflow: it is run by hand once per new environment.
+%% GitHub settings (branch protection, the reviewer on the "production" environment) are not repository files: not verified here.
+sequenceDiagram
+    autonumber
+    actor Dev as Developer
+    participant GH as GitHub
+    participant CI as CI workflow (ci.yml)
+    participant DP as Deploy workflow (deploy.yml)
+    actor Rev as Reviewer (production environment)
+    participant V as Vercel CLI
+    participant DB as Production PostgreSQL (PROD_DIRECT_URL)
+    participant APP as Deployed app
+    participant SM as Smoke test (curl /api/health/ready)
+
+    Dev->>GH: push to main (or pull request)
+    GH->>CI: lint, typecheck, build, test (Postgres 16 service), audit (npm audit --omit=dev --audit-level=high)
+    CI->>CI: test job: create pfc_app, prisma migrate deploy on it, npm test on pfc_test
+    CI-->>GH: all jobs succeed
+    GH->>DP: workflow_run completed, conclusion success, event push, branch main
+    DP->>Rev: job uses environment production, waits for approval
+    Rev-->>DP: approves
+    DP->>DP: checkout the exact head_sha CI passed on, npm ci, install vercel CLI
+    DP->>V: vercel pull --environment=production
+    DP->>V: vercel build --prod
+    DP->>DB: npx prisma migrate deploy (before the new code goes live)
+    Note over DP,DB: Previous release still serves traffic on the new schema, so migrations must be backward compatible
+    DP->>V: vercel deploy --prebuilt --prod
+    V-->>DP: deployment URL
+    DP->>SM: GET URL/api/health/ready, retry 6 times, 10 s apart
+    SM->>APP: request (x-vercel-protection-bypass only if the secret is set)
+    APP->>DB: SELECT 1 (healthRepository.pingDatabase)
+    APP-->>SM: 200 status ok, or 503 status unavailable
+    SM-->>DP: pass or fail the job
+
+    Note over Dev,DB: Seeding a new environment, by hand, once (docs/OPERATIONS.md)
+    Dev->>Dev: set DATABASE_URL = DIRECT_URL, SEED_CONFIRM_HOST, SEED_ADMIN_PASSWORD, SEED_DEMO_PASSWORD in the shell only
+    Dev->>Dev: npx prisma db seed (prisma/seed.ts)
+    Note over Dev,DB: checkSeedTarget runs first, before anything connects to the database
+    alt DIRECT_URL and DATABASE_URL name different hosts, or neither is a valid URL
+        Dev-->>Dev: Refusing to seed
+    else host is localhost, in SEED_ALLOWED_HOSTS, or equals SEED_CONFIRM_HOST
+        Note over Dev,DB: checkSeedPasswords
+        alt host only allowed through SEED_CONFIRM_HOST (private target)
+            alt either password variable missing, shorter than 12, equal to the other, or a published demo password
+                Dev-->>Dev: Refusing to seed (names the variable and rule, never a value)
+            else both valid
+                Dev->>DB: upsert demo accounts and data with the two private passwords
+                Dev-->>Dev: prints Seeding host only
+            end
+        else localhost or SEED_ALLOWED_HOSTS
+            Dev->>DB: upsert demo data (published passwords unless the variables are set and valid)
+        end
+    else any other host
+        Dev-->>Dev: Refusing to seed, naming the host and the way out
+    end
+    Dev->>SM: npm run smoke -- production URL --expect-seed

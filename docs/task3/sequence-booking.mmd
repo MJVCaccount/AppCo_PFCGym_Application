@@ -1,0 +1,60 @@
+%% Source: src/actions/gym.ts (book), src/app/api/bookings/route.ts,
+%% src/lib/services/bookingService.ts (createBooking),
+%% src/lib/repositories/bookingsRepository.ts (createBooking, cancelBooking).
+%% Tests: tests/api.test.ts ("5 members racing for 1 place...", "trying a full class
+%% again reuses the Failed row", "when a place frees up, the Failed row becomes Confirmed").
+sequenceDiagram
+    autonumber
+    actor M as Member or Fighter
+    participant A as book action / POST /api/bookings
+    participant RL as rateLimit (booking: 30 per 10 min per user)
+    participant S as bookingService.createBooking
+    participant R as bookingsRepository.createBooking
+    participant DB as PostgreSQL
+    participant N as notificationService (after response)
+
+    M->>A: slotId
+    A->>A: getSession (401 / redirect to /login if none)
+    A->>RL: checkLimit("booking", userId)
+    RL-->>A: allowed, or 429 / error message
+    A->>S: createBooking(session, classId)
+    S->>S: role must be Member or Fighter (else 403), id must be valid (else 400)
+    S->>R: createBooking(memberId, classId, now)
+    R->>DB: BEGIN
+    R->>DB: SELECT planId FROM Member
+    R->>DB: SELECT ... FROM GymClass WHERE id FOR UPDATE (row lock)
+    Note over R,DB: A second member booking the same class waits here until this transaction commits
+    alt class missing or inactive
+        R-->>S: class-not-found (404)
+    else member has no plan
+        R-->>S: no-plan (403)
+    else
+        R->>R: sessionDate = nextOccurrence(day, startsAt, now) on the Johannesburg clock
+        R->>DB: COUNT Booking WHERE class, sessionDate, status = Confirmed
+        R->>DB: SELECT existing row for (member, class, sessionDate)
+        alt existing row is not Cancelled and not Failed
+            R-->>S: duplicate (409)
+        else count >= capacity
+            alt existing row is Cancelled or Failed
+                R->>DB: UPDATE row SET status = Failed, failureReason = Class full
+            else no row yet
+                R->>DB: INSERT row status = Failed, failureReason = Class full
+            end
+            R->>DB: COMMIT (the Failed row is kept)
+            R-->>S: full (409, message names class and time)
+        else place available
+            alt existing row is Cancelled or Failed (reuse)
+                R->>DB: UPDATE status = Pending, failureReason = null, cancelledAt = null
+            else no row yet
+                R->>DB: INSERT status = Pending
+            end
+            R->>DB: UPDATE status = Confirmed
+            R->>DB: COMMIT
+            R-->>S: booking
+        end
+    end
+    S->>N: notifyBookingConfirmed (only on success)
+    S->>S: getSlot(classId) for the refreshed count
+    S-->>A: 201 with slot (409 / 403 / 404 otherwise)
+    A-->>M: redirect with notice, or JSON data = slot
+    N-->>M: confirmation email after the response (a failure is logged, the booking stays)

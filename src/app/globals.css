@@ -344,6 +344,13 @@ h3{font-size:var(--fs-h3);letter-spacing:-.01em}
 .field textarea{min-height:130px;resize:vertical}
 .field input::placeholder,.field textarea::placeholder{color:#8C8C8C}
 .field input:focus,.field textarea:focus,.field select:focus{border-color:var(--red);outline:none}
+/* Keyboard focus ring: 2px red, 2px clear of the field so it is not clipped.
+   Red #FF0000 against the field (#252525) is 3.83:1, against the page
+   (#000000) 5.25:1 and against a card (#171717) 4.48:1; all above the 3:1
+   that WCAG 1.4.11 asks of a focus indicator. */
+.field input:focus-visible,.field textarea:focus-visible,.field select:focus-visible{
+  outline:2px solid var(--red);outline-offset:2px;
+}
 .field input[aria-invalid="true"],.field textarea[aria-invalid="true"]{border-color:#FF4D4D}
 .field .error{display:block;margin-top:6px;font-size:11px;color:#FF6B6B;min-height:14px}
 .field__row{display:flex;gap:10px;align-items:center}
@@ -628,3 +635,27 @@ button.pill-link:hover{background:#fff;color:#000}
 }
 /* a wide table must scroll inside its wrapper, not stretch the grid column */
 .dash__main{min-width:0}
+
+/* ---------- 25. Tap targets ----------
+   Minimum sizes only: no font size, colour or spacing between neighbours
+   changes. Below 1024px every interactive control is at least 44px tall;
+   from 1024px nothing that stands alone is under 24px. */
+.header__login,.nav a,.footer details li a,.footer__legal a,.footer .contact-list a,
+.form-note a,.auth a:not(.btn){
+  display:inline-flex;align-items:center;min-height:24px;
+}
+.toggle-pw{min-height:24px}
+@media (max-width:1023px){
+  .header__login,.footer details li a,.footer__legal a,.footer .contact-list a,
+  .form-note a,.auth a:not(.btn){min-height:44px}
+  .btn--sm{min-height:44px}
+  .pill-link,button.pill-link{min-height:44px}
+  .toggle-pw{min-height:44px}
+  /* the logo keeps its 64x32 outlined box; the link around it grows to 44px */
+  .logo{position:relative;height:44px;border:0;border-radius:0}
+  .logo::before{
+    content:"";position:absolute;inset:6px 0;
+    border:1.5px solid var(--red);border-radius:4px;
+  }
+  .logo span{position:relative}
+}

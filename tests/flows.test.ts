@@ -21,6 +21,7 @@ import { RedirectError } from "./support/next-navigation";
 
 import { login, register, requestPasswordReset, submitPasswordReset } from "../src/actions/auth";
 import { sendEnquiry } from "../src/actions/gym";
+import AdminIndexPage from "../src/app/admin/page";
 import { POST as adminEventsPost } from "../src/app/api/admin/events/route";
 import { PATCH as adminEventPatch } from "../src/app/api/admin/events/[id]/route";
 import { POST as adminOffersPost } from "../src/app/api/admin/events/[id]/offers/route";
@@ -1019,6 +1020,40 @@ async function main() {
     assert.equal(right.redirect, null, "guessing is not rewarded after the limit");
     assert.match(right.state?.message ?? "", /Too many attempts/);
     assert.equal(await getSession(), null);
+  });
+
+  // ================================================================ ADMIN INDEX
+
+  console.log("\nADMIN INDEX");
+
+  /** Where rendering /admin sends the current visitor (it never renders). */
+  async function adminIndexTarget(): Promise<string> {
+    try {
+      await AdminIndexPage();
+    } catch (error) {
+      if (error instanceof RedirectError) return error.url;
+      throw error;
+    }
+    assert.fail("/admin rendered instead of redirecting");
+  }
+
+  await check("/admin sends an admin to /admin/classes", async () => {
+    await asRole("admin@pfc.co.za");
+    assert.equal(await adminIndexTarget(), "/admin/classes");
+    await signOut();
+  });
+
+  await check("/admin sends a member, a fighter and a coach to /denied", async () => {
+    for (const email of ["member@pfc.co.za", "fighter@pfc.co.za", "sofia@pfc.co.za"]) {
+      await asRole(email);
+      assert.equal(await adminIndexTarget(), "/denied", email);
+    }
+    await signOut();
+  });
+
+  await check("/admin sends a signed-out visitor to sign in, and back to /admin afterwards", async () => {
+    await signOut();
+    assert.equal(await adminIndexTarget(), "/login?returnUrl=%2Fadmin");
   });
 
   console.log(`\n${passed} checks passed\n`);

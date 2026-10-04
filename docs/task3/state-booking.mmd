@@ -1,0 +1,19 @@
+%% Source: src/lib/repositories/bookingsRepository.ts (createBooking, cancelBooking, cancelFutureConfirmed),
+%% src/lib/repositories/attendanceRepository.ts (MARKABLE = Confirmed, Completed, NoShow),
+%% src/lib/services/bookingService.ts (listMyBookings shows a past Confirmed row as Completed without writing it).
+%% Tests: tests/api.test.ts, tests/admin.test.ts ("a cancelled or failed booking cannot be marked").
+stateDiagram-v2
+    [*] --> Pending : seat free, row inserted or reused
+    [*] --> Failed : class full, row inserted (failureReason "Class full")
+    Pending --> Confirmed : same transaction, after the capacity check
+    Confirmed --> Cancelled : member cancels before the class starts, or the gym deactivates the class or account
+    Confirmed --> Completed : coach or admin marks attended, once the date has arrived (Johannesburg)
+    Confirmed --> NoShow : coach or admin marks no-show, once the date has arrived
+    Completed --> NoShow : correction
+    NoShow --> Completed : correction
+    Cancelled --> Pending : member books the same class and date again (row reused)
+    Failed --> Pending : a place has freed up and the member tries again (row reused)
+    Failed --> Failed : still full (row updated)
+    Cancelled --> Failed : booked again while the class is full (row updated)
+    Completed --> [*]
+    NoShow --> [*]

@@ -1,0 +1,46 @@
+%% Source: .github/workflows/ci.yml, .github/workflows/deploy.yml, vercel.json (git deployment disabled).
+%% Not in the repository, so not verified: branch protection rules, and the required reviewer on the
+%% "production" GitHub Environment (deploy.yml names the environment; the approval is a GitHub setting).
+flowchart TD
+    PR["Pull request to develop or main"] --> CI
+    PUSH["Push to develop or main"] --> CI
+
+    subgraph CI["CI workflow (ci.yml), cancels older runs of the same ref"]
+        direction LR
+        L["lint<br/>npm run lint"]
+        T["typecheck<br/>npm run typecheck"]
+        B["build<br/>npm run build (placeholder env)"]
+        TS["test<br/>Postgres 16 service<br/>create pfc_app, prisma migrate deploy,<br/>npm test on pfc_test"]
+        A["audit<br/>npm audit --omit=dev --audit-level=high"]
+    end
+
+    CI -- "all jobs succeed AND event is push" --> WR["workflow_run completed (deploy.yml)"]
+    CI -- "pull request: stops here" --> END1(["no deploy"])
+
+    WR -- "head branch main" --> APPROVAL{{"environment: production<br/>waits for a reviewer"}}
+    WR -- "head branch develop" --> PV
+
+    subgraph PROD["production job"]
+        direction TB
+        APPROVAL --> P1["checkout head_sha CI passed on<br/>npm ci, install vercel CLI"]
+        P1 --> P2["vercel pull --environment=production"]
+        P2 --> P3["vercel build --prod"]
+        P3 --> P4["prisma migrate deploy<br/>(PROD_DIRECT_URL, before the code goes live)"]
+        P4 --> P5["vercel deploy --prebuilt --prod"]
+        P5 --> P6["smoke test: curl /api/health/ready<br/>retry 6 x 10 s"]
+    end
+
+    subgraph PV["preview job (develop)"]
+        direction TB
+        V1["checkout head_sha, npm ci, vercel CLI"] --> V2["vercel pull --environment=preview"]
+        V2 --> V3["vercel build"]
+        V3 --> V4["prisma migrate deploy<br/>(PREVIEW_DIRECT_URL, Neon dev branch)"]
+        V4 --> V5["vercel deploy --prebuilt"]
+        V5 --> V6{"repo variable<br/>PREVIEW_ALIAS set?"}
+        V6 -- yes --> V7["vercel alias set"]
+        V6 -- no --> V8
+        V7 --> V8["smoke test: /api/health/ready"]
+    end
+
+    P6 --> LIVE(["production live"])
+    V8 --> PLIVE(["preview live"])

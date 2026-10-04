@@ -28,7 +28,6 @@ export default function SiteNav({ session, todayHours, logoutAction }: Props) {
 
   const panelRef = useRef<HTMLDivElement>(null);
   const burgerRef = useRef<HTMLButtonElement>(null);
-  const closeRef = useRef<HTMLButtonElement>(null);
 
   const canBook = session !== null && isMemberRole(session.role);
 
@@ -49,7 +48,21 @@ export default function SiteNav({ session, todayHours, logoutAction }: Props) {
 
     const previous = document.body.style.overflow;
     document.body.style.overflow = "hidden";
-    closeRef.current?.focus();
+
+    // Move focus to the first link in the overlay. The panel is
+    // visibility:hidden until its transition starts, and a hidden element
+    // cannot take focus, so try again once the browser has painted it.
+    const focusFirstLink = () => {
+      const first = panelRef.current?.querySelector<HTMLElement>(
+        ".navpanel__list a",
+      );
+      first?.focus();
+      return panelRef.current?.contains(document.activeElement) ?? false;
+    };
+    let retry: ReturnType<typeof setTimeout> | undefined;
+    const frame = requestAnimationFrame(() => {
+      if (!focusFirstLink()) retry = setTimeout(focusFirstLink, 320);
+    });
 
     function onKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") {
@@ -80,6 +93,8 @@ export default function SiteNav({ session, todayHours, logoutAction }: Props) {
     document.addEventListener("keydown", onKeyDown);
 
     return () => {
+      cancelAnimationFrame(frame);
+      if (retry) clearTimeout(retry);
       document.removeEventListener("keydown", onKeyDown);
       document.body.style.overflow = previous;
     };
@@ -160,7 +175,6 @@ export default function SiteNav({ session, todayHours, logoutAction }: Props) {
       >
         <div className="navpanel__top">
           <button
-            ref={closeRef}
             className="navpanel__close"
             type="button"
             aria-label="Close menu"
