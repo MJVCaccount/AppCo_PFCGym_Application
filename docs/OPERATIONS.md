@@ -92,8 +92,11 @@ command only), and `SMOKE_BYPASS_SECRET`.
 
 ## Seeding production once
 
-The seed creates demo accounts with known passwords, for the module
-demonstration only, so it refuses any host that is not localhost, listed in
+The seed creates demo accounts, for the module demonstration only. Their
+passwords are published in the public README, so a hosted database must get
+its own: `SEED_ADMIN_PASSWORD` and `SEED_DEMO_PASSWORD` are both required there
+(at least 12 characters each, different from each other and from the published
+ones) and the seed refuses without them. It also refuses any host that is not localhost, listed in
 `SEED_ALLOWED_HOSTS` or named in `SEED_CONFIRM_HOST` (`prisma/seedGuard.ts`).
 It also re-applies the demo passwords on every run, so never seed a database
 real members use. To seed production once, after the
@@ -101,10 +104,12 @@ first deploy has applied the migrations, run this in PowerShell. It sets the
 variables for this command only and removes them afterwards:
 
 ```powershell
-$env:DATABASE_URL = "<production direct string>"; $env:DIRECT_URL = $env:DATABASE_URL; $env:SEED_CONFIRM_HOST = "<its host, no -pooler>"; npx prisma db seed; Remove-Item Env:DATABASE_URL, Env:DIRECT_URL, Env:SEED_CONFIRM_HOST
+$env:DATABASE_URL = "<production direct string>"; $env:DIRECT_URL = $env:DATABASE_URL; $env:SEED_CONFIRM_HOST = "<its host, no -pooler>"; $env:SEED_ADMIN_PASSWORD = "<a new admin password, 12+ characters>"; $env:SEED_DEMO_PASSWORD = "<a different password, 12+ characters>"; npx prisma db seed; Remove-Item Env:DATABASE_URL, Env:DIRECT_URL, Env:SEED_CONFIRM_HOST, Env:SEED_ADMIN_PASSWORD, Env:SEED_DEMO_PASSWORD
 ```
 
-The seed prints only `Seeding <host>`. Afterwards, change or deactivate any
+The seed prints only `Seeding <host>` and, when the passwords come from the
+environment, `Using passwords from the environment`; never a password. Re-running
+it re-applies the environment passwords. Afterwards, change or deactivate any
 demo account you do not want on a public site.
 
 ## Releasing from develop to main

@@ -87,3 +87,97 @@ export function checkSeedTarget(env: SeedEnv): SeedCheck {
       `If you really mean to seed it, set SEED_CONFIRM_HOST to ${host} for this one command.`,
   };
 }
+
+// ---------------------------------------------------------------- passwords
+
+/**
+ * The demo passwords are printed in the public README, so on any database that
+ * is not a local or dev one they must be replaced.
+ */
+export const PUBLISHED_DEMO_PASSWORDS: readonly string[] = [
+  "Member123!",
+  "Fighter123!",
+  "Coach123!",
+  "Admin123!",
+];
+
+export const MIN_SEED_PASSWORD_LENGTH = 12;
+
+export type SeedPasswords =
+  | {
+      ok: true;
+      /** For admin@pfc.co.za, or null to keep the published one. */
+      adminPassword: string | null;
+      /** For member@, fighter@, marcus@ and sofia@pfc.co.za, or null to keep the published ones. */
+      demoPassword: string | null;
+    }
+  | { ok: false; message: string };
+
+/**
+ * A "private target" is a database that is neither localhost nor listed in
+ * SEED_ALLOWED_HOSTS: it was let through only by SEED_CONFIRM_HOST, which is
+ * how production is seeded. A host that cannot be read counts as private.
+ */
+export function isPrivateTarget(env: SeedEnv): boolean {
+  const host = hostOf(env.DIRECT_URL) ?? hostOf(env.DATABASE_URL);
+  if (!host) return true;
+
+  return !LOCAL_HOSTS.includes(host) && !listOf(env.SEED_ALLOWED_HOSTS).includes(host);
+}
+
+/** What is wrong with one password variable, or null. The value is never in the answer. */
+function passwordProblem(name: string, value: string): string | null {
+  // The published ones are short, so name them before the length rule does.
+  if (PUBLISHED_DEMO_PASSWORDS.includes(value)) {
+    return `${name} must not be one of the demo passwords published in the README.`;
+  }
+  if (value.length < MIN_SEED_PASSWORD_LENGTH) {
+    return `${name} must be at least ${MIN_SEED_PASSWORD_LENGTH} characters.`;
+  }
+  return null;
+}
+
+/**
+ * SEED_ADMIN_PASSWORD (for admin@pfc.co.za) and SEED_DEMO_PASSWORD (for the
+ * member, fighter and two demo coaches). Both are required for a private
+ * target. For localhost and allow-listed hosts they are optional: unset means
+ * the published passwords, set means they are validated the same way.
+ *
+ * A refusal names the variable and the rule, never a value.
+ */
+export function checkSeedPasswords(env: SeedEnv): SeedPasswords {
+  const required = isPrivateTarget(env);
+  const admin = env.SEED_ADMIN_PASSWORD || undefined;
+  const demo = env.SEED_DEMO_PASSWORD || undefined;
+
+  const given: [string, string | undefined][] = [
+    ["SEED_ADMIN_PASSWORD", admin],
+    ["SEED_DEMO_PASSWORD", demo],
+  ];
+
+  for (const [name, value] of given) {
+    if (value === undefined) {
+      if (required) {
+        return {
+          ok: false,
+          message:
+            `Refusing to seed: ${name} is required for a database that is not localhost or in SEED_ALLOWED_HOSTS, ` +
+            `because the demo passwords are published in the README. Set it for this one command.`,
+        };
+      }
+      continue;
+    }
+
+    const problem = passwordProblem(name, value);
+    if (problem) return { ok: false, message: `Refusing to seed: ${problem}` };
+  }
+
+  if (admin !== undefined && demo !== undefined && admin === demo) {
+    return {
+      ok: false,
+      message: "Refusing to seed: SEED_ADMIN_PASSWORD and SEED_DEMO_PASSWORD must be different from each other.",
+    };
+  }
+
+  return { ok: true, adminPassword: admin ?? null, demoPassword: demo ?? null };
+}

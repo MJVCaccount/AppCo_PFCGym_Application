@@ -20,7 +20,7 @@ import {
   nextOccurrence,
 } from "../src/lib/dates";
 import { hashPassword } from "../src/lib/password";
-import { checkSeedTarget } from "./seedGuard";
+import { checkSeedPasswords, checkSeedTarget } from "./seedGuard";
 
 const prisma = new PrismaClient();
 
@@ -331,6 +331,16 @@ async function main() {
   if (!target.ok) throw new Error(target.message);
   console.log(`Seeding ${target.host}`);
 
+  // The published demo passwords may only be used on a local or dev database.
+  // Otherwise both overrides are required; the message never holds a value.
+  const passwords = checkSeedPasswords(process.env);
+  if (!passwords.ok) throw new Error(passwords.message);
+  const adminPassword = passwords.adminPassword ?? "Admin123!";
+  const demoPassword = (published: string) => passwords.demoPassword ?? published;
+  if (passwords.adminPassword !== null || passwords.demoPassword !== null) {
+    console.log("Using passwords from the environment");
+  }
+
   const now = new Date();
 
   // Catalogue
@@ -384,7 +394,7 @@ async function main() {
     email: "member@pfc.co.za",
     fullName: "John Wick",
     role: "Member",
-    password: "Member123!",
+    password: demoPassword("Member123!"),
   });
   await upsertMember(memberId, popularPlanId);
 
@@ -392,7 +402,7 @@ async function main() {
     email: "admin@pfc.co.za",
     fullName: "Ruan Cupido",
     role: "Admin",
-    password: "Admin123!",
+    password: adminPassword,
   });
   await prisma.admin.upsert({
     where: { adminId },
@@ -406,7 +416,7 @@ async function main() {
       email: coach.email,
       fullName: coach.name,
       role: "Coach",
-      password: coach.password,
+      password: coach.password === null ? null : demoPassword(coach.password),
     });
     const profile = { title: coach.title, bio: coach.bio };
     await prisma.coach.upsert({
@@ -421,7 +431,7 @@ async function main() {
     email: "fighter@pfc.co.za",
     fullName: "Demo Fighter",
     role: "Fighter",
-    password: "Fighter123!",
+    password: demoPassword("Fighter123!"),
   });
   await upsertMember(fighterId, topPlanId);
   const record = { weightClass: "Welterweight", wins: 3, losses: 1, draws: 0 };

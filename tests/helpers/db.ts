@@ -84,14 +84,20 @@ process.env.DATABASE_URL = testUrl;
 process.env.DIRECT_URL = testUrl;
 // The seed refuses databases it does not know; the test database is one it
 // should seed, and it is the only one this file ever points it at.
-process.env.SEED_CONFIRM_HOST = hostOf(testUrl) ?? "";
+process.env.SEED_ALLOWED_HOSTS = hostOf(testUrl) ?? "";
+process.env.SEED_CONFIRM_HOST = "";
+// An allow-listed host keeps the published demo passwords that the tests sign in
+// with, whatever the developer has in .env. Tests that want others pass them to
+// seedTestDatabase().
+process.env.SEED_ADMIN_PASSWORD = "";
+process.env.SEED_DEMO_PASSWORD = "";
 
 /** Direct access for fixtures and for asserting on stored rows. */
 export const testDb = new PrismaClient({ datasourceUrl: testUrl });
 
-function run(command: string): void {
+function run(command: string, extraEnv: Record<string, string> = {}): string {
   try {
-    execSync(command, { cwd: ROOT, env: process.env, stdio: "pipe" });
+    return execSync(command, { cwd: ROOT, env: { ...process.env, ...extraEnv }, stdio: "pipe" }).toString();
   } catch (error) {
     const stderr = (error as { stderr?: Buffer }).stderr?.toString() ?? "";
     throw new Error(`"${command}" failed.\n${stderr}`);
@@ -118,5 +124,14 @@ export async function resetDatabase(): Promise<void> {
     );
   }
 
-  run("npx prisma db seed");
+  seedTestDatabase();
+}
+
+/**
+ * Runs the seed against the test database. `extraEnv` is for the seed process
+ * only, e.g. SEED_ADMIN_PASSWORD; without it the published passwords are used.
+ * Returns what the seed printed.
+ */
+export function seedTestDatabase(extraEnv: Record<string, string> = {}): string {
+  return run("npx prisma db seed", extraEnv);
 }

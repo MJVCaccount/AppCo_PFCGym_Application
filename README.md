@@ -43,9 +43,13 @@ npm run dev                  # http://localhost:3000
 ### Demo accounts
 
 **These accounts and their passwords exist for the module demonstration only.**
-The passwords are published in this file and in `prisma/seed.ts`, and the seed
-re-applies them every time it runs. Remove or change them, and never run the
-seed, on any database real members use.
+The passwords below are published in this public repository, so they are valid
+for **localhost and the dev database only**. A hosted database needs its own:
+the seed refuses to run against it unless `SEED_ADMIN_PASSWORD` (for
+`admin@pfc.co.za`) and `SEED_DEMO_PASSWORD` (for the member, fighter and two
+demo coaches) are set, each at least 12 characters, different from each other
+and from the published ones. The seed re-applies passwords every time it runs;
+never run it against a database real members use.
 
 | Email | Password | Role | Notes |
 |---|---|---|---|
@@ -88,6 +92,7 @@ Every variable the code reads. Copy `.env.example` to `.env` (local) or set them
 | `RATE_LIMIT_MULTIPLIER` | No | Whole number 1 to 20 (default 1, anything else ignored). Multiplies every rate limit, for a busy day such as the EXPO when a crowd shares one network address. Set it in the Vercel dashboard; set it back to 1 afterwards |
 | `SEED_ALLOWED_HOSTS` | Local | Hosts the seed may write to besides localhost (the Neon dev host) |
 | `SEED_CONFIRM_HOST` | One command | The host of a database to seed once on purpose; never saved in a file |
+| `SEED_ADMIN_PASSWORD`, `SEED_DEMO_PASSWORD` | Required when seeding a hosted database | Passwords for the demo accounts instead of the published ones (12+ characters, different from each other and from the published ones). Optional on localhost and in `SEED_ALLOWED_HOSTS`; one command only |
 | `TEST_DATABASE_URL` | Tests | A separate database for `npm test`. The tests empty every table and refuse the same database as `DATABASE_URL` or `DIRECT_URL` |
 | `SMOKE_BYPASS_SECRET` | Smoke test | Vercel's deployment-protection bypass secret, only if protection is on |
 
