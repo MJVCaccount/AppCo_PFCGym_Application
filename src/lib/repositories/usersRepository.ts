@@ -113,6 +113,8 @@ export interface SessionState {
   fullName: string;
   role: Role;
   isActive: boolean;
+  /** Bumped by a password reset; a cookie issued under an older value is dead. */
+  sessionVersion: number;
 }
 
 export async function getSessionState(
@@ -122,7 +124,13 @@ export async function getSessionState(
 
   const row = await prisma.user.findUnique({
     where: { id },
-    select: { email: true, fullName: true, role: true, isActive: true },
+    select: {
+      email: true,
+      fullName: true,
+      role: true,
+      isActive: true,
+      sessionVersion: true,
+    },
   });
 
   return row ?? undefined;

@@ -5,6 +5,13 @@ import { revalidatePath } from "next/cache";
 
 import { ERROR_CODES, mapPrismaError } from "@/lib/errors";
 import { getPlan } from "@/lib/repositories/plansRepository";
+import { notifyWelcome } from "@/lib/services/notificationService";
+import {
+  RESET_INVALID,
+  RESET_REQUESTED,
+  requestReset,
+  resetPassword,
+} from "@/lib/services/passwordService";
 import {
   createMember,
   findByEmail,
@@ -119,9 +126,48 @@ export async function register(
     return { ok: false, message: error.message, values };
   }
 
+  notifyWelcome(user);
+
   await createSession(toSessionUser(user));
   revalidatePath("/", "layout");
   redirect("/dashboard?welcome=1");
+}
+
+/**
+ * "Forgot password" form. The answer is always the same message, whether or
+ * not the email has an account. A rate limiter belongs around this call.
+ */
+export async function requestPasswordReset(
+  _prev: FormState,
+  data: FormData,
+): Promise<FormState> {
+  const email = String(data.get("email") ?? "");
+  const values = valuesFrom(data, ["email"]);
+
+  const errors = validate(data, { email: "email" });
+  if (Object.keys(errors).length > 0) return { ok: false, errors, values };
+
+  const result = await requestReset(email);
+  return { ok: true, message: result.data?.message ?? RESET_REQUESTED };
+}
+
+/** The "choose a new password" form behind an emailed link. */
+export async function submitPasswordReset(
+  _prev: FormState,
+  data: FormData,
+): Promise<FormState> {
+  const result = await resetPassword(
+    String(data.get("token") ?? ""),
+    String(data.get("password") ?? ""),
+  );
+
+  if (!result.ok) {
+    return result.field === "password"
+      ? { ok: false, errors: { password: result.error ?? "" } }
+      : { ok: false, message: result.error ?? RESET_INVALID };
+  }
+
+  redirect("/login?notice=Password+updated");
 }
 
 export async function logout(): Promise<void> {

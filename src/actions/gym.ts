@@ -3,9 +3,11 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
-import { logger } from "@/lib/logger";
+import { isEmailConfigured } from "@/lib/env";
 import { getSession } from "@/lib/session";
 import { cancelBooking, createBooking } from "@/lib/services/bookingService";
+import { submitEnquiry } from "@/lib/services/contactService";
+import { optionalText } from "@/lib/text";
 import {
   cancelMembership as cancelPlan,
   changePlan as switchPlan,
@@ -36,8 +38,12 @@ export async function book(data: FormData): Promise<void> {
     redirect(`/timetable?day=${day}&error=${encodeURIComponent(message)}`);
   }
 
+  // Only promise an email when one can actually be sent.
+  const emailNote = isEmailConfigured()
+    ? " A confirmation email is on its way."
+    : "";
   const confirmation = result.slot
-    ? `Booked ${result.slot.className} at ${result.slot.startsAt} with ${result.slot.coachName}. A confirmation email is on its way.`
+    ? `Booked ${result.slot.className} at ${result.slot.startsAt} with ${result.slot.coachName}.${emailNote}`
     : "Class booked.";
 
   redirect(`/timetable?day=${day}&booked=${encodeURIComponent(confirmation)}`);
@@ -109,15 +115,25 @@ export async function cancelMembership(): Promise<void> {
   );
 }
 
+const ENQUIRY_THANKS =
+  "Thanks — your message is on its way. We usually reply within one working day.";
+
 /**
  * Contact enquiry.
  *
- * Part 2 replaces the log line with a database write and an email send.
+ * The message is saved before any email is queued, so the visitor sees the
+ * success message whatever happens to the email.
  */
 export async function sendEnquiry(
   _prev: FormState,
   data: FormData,
 ): Promise<FormState> {
+  // The honeypot: people never see this field, bots fill it in. A bot gets
+  // the normal thank-you, so it learns nothing, and nothing is saved or sent.
+  if (optionalText(data.get("website")) !== null) {
+    return { ok: true, message: ENQUIRY_THANKS };
+  }
+
   const values = valuesFrom(data, ["fullName", "email", "phone", "message"]);
   const errors = validate(data, {
     fullName: "name",
@@ -135,11 +151,20 @@ export async function sendEnquiry(
     };
   }
 
-  logger.info("Contact enquiry received");
+  const result = await submitEnquiry({
+    fullName: String(data.get("fullName") ?? ""),
+    email: String(data.get("email") ?? ""),
+    phone: data.get("phone"),
+    message: String(data.get("message") ?? ""),
+  });
 
-  return {
-    ok: true,
-    message:
-      "Thanks — your message is on its way. We usually reply within one working day.",
-  };
+  if (!result.ok) {
+    return {
+      ok: false,
+      message: result.error ?? "Your message could not be sent. Please try again.",
+      values,
+    };
+  }
+
+  return { ok: true, message: ENQUIRY_THANKS };
 }

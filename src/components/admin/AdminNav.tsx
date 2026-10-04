@@ -8,8 +8,10 @@ const SECTIONS = [
   { href: "/admin/coaches", label: "Coaches" },
   { href: "/admin/members", label: "Members" },
   { href: "/admin/fighters", label: "Fighters" },
+  { href: "/admin/documents", label: "Documents" },
   { href: "/admin/events", label: "Events" },
   { href: "/admin/plans", label: "Plans" },
+  { href: "/admin/enquiries", label: "Enquiries" },
   { href: "/admin/audit", label: "Audit" },
 ] as const;
 

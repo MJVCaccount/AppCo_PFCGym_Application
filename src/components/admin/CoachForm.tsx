@@ -2,6 +2,7 @@
 
 import { useActionState } from "react";
 
+import ImageUploadField from "@/components/admin/ImageUploadField";
 import Alert from "@/components/Alert";
 import SubmitButton from "@/components/SubmitButton";
 import TextField from "@/components/TextField";
@@ -34,6 +35,7 @@ export default function CoachForm({ action, initial, submitLabel }: Props) {
         defaultValue={value("imageUrl")}
         error={error("imageUrl")}
       />
+      <ImageUploadField label="Upload a photo" />
       <TextField name="bio" label="Bio" multiline full defaultValue={value("bio")} error={error("bio")} />
 
       {state.message && (

@@ -21,6 +21,10 @@ import type { Role, SessionUser } from "./types";
  *
  * The role in the cookie is never trusted for a decision: getSession() reads
  * the account's current role and active flag from the database each request.
+ *
+ * The payload also carries `sv`, the account's sessionVersion when the cookie
+ * was issued. A password reset bumps the stored version, which kills every
+ * cookie issued before it. A cookie with no `sv` is invalid.
  */
 
 const COOKIE_NAME = "pfc_session";
@@ -48,12 +52,18 @@ function sign(payload: string): string {
   return createHmac("sha256", secret()).update(payload).digest("base64url");
 }
 
-function encode(user: SessionUser): string {
-  const payload = Buffer.from(JSON.stringify(user)).toString("base64url");
+interface SessionPayload extends SessionUser {
+  sv: number;
+}
+
+function encode(user: SessionUser, sv: number): string {
+  const payload = Buffer.from(JSON.stringify({ ...user, sv })).toString(
+    "base64url",
+  );
   return `${payload}.${sign(payload)}`;
 }
 
-function decode(token: string): SessionUser | null {
+function decode(token: string): SessionPayload | null {
   const [payload, signature] = token.split(".");
   if (!payload || !signature) return null;
 
@@ -66,12 +76,13 @@ function decode(token: string): SessionUser | null {
   try {
     const parsed = JSON.parse(
       Buffer.from(payload, "base64url").toString("utf8"),
-    ) as SessionUser;
+    ) as SessionPayload;
 
     if (
       typeof parsed?.id !== "number" ||
       typeof parsed?.email !== "string" ||
       typeof parsed?.fullName !== "string" ||
+      !Number.isInteger(parsed?.sv) ||
       !ALLOWED_ROLES.includes(parsed?.role)
     ) {
       return null;
@@ -87,8 +98,11 @@ function decode(token: string): SessionUser | null {
 
 export async function createSession(user: SessionUser): Promise<void> {
   const store = await cookies();
+  // Read fresh, not through the per-request cache: this is the value the new
+  // cookie is tied to.
+  const state = await getSessionState(user.id);
 
-  store.set(COOKIE_NAME, encode(user), {
+  store.set(COOKIE_NAME, encode(user, state?.sessionVersion ?? 0), {
     httpOnly: true,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
@@ -126,6 +140,7 @@ export async function getSession(): Promise<SessionUser | null> {
 
   const state = await loadSessionState(claimed.id);
   if (!state || !state.isActive) return null;
+  if (state.sessionVersion !== claimed.sv) return null;
 
   return {
     id: claimed.id,

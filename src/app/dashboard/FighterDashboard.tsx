@@ -1,7 +1,10 @@
 import { respondToOfferAction } from "@/actions/fighter";
 import Alert from "@/components/Alert";
+import DocumentList from "@/components/DocumentList";
+import DocumentUploadForm from "@/components/DocumentUploadForm";
 import SubmitButton from "@/components/SubmitButton";
 import { formatEventDate } from "@/lib/dates";
+import { listMyDocuments } from "@/lib/services/documentService";
 import { listMyOffers } from "@/lib/services/fighterService";
 import { type BoutOffer, formatRecord } from "@/lib/types";
 import type { SessionUser } from "@/lib/types";
@@ -96,7 +99,10 @@ export default function FighterDashboard({
 }
 
 async function FighterSections({ session }: { session: SessionUser }) {
-  const result = await listMyOffers(session);
+  const [result, documents] = await Promise.all([
+    listMyOffers(session),
+    listMyDocuments(session),
+  ]);
 
   if (!result.ok || !result.data) {
     return (
@@ -177,6 +183,26 @@ async function FighterSections({ session }: { session: SessionUser }) {
           </div>
         </>
       )}
+
+      <div className="section-head">
+        <h2>Your documents</h2>
+        <p className="lead">
+          Upload your medical and licence documents. They are private: only
+          you and the gym&apos;s administrators can open them.
+        </p>
+      </div>
+      <div style={{ marginBottom: 24 }}>
+        <DocumentUploadForm />
+      </div>
+      <div style={{ marginBottom: 40 }}>
+        {documents.ok ? (
+          <DocumentList documents={documents.data ?? []} />
+        ) : (
+          <Alert kind="err">
+            {documents.error ?? "Your documents could not be loaded."}
+          </Alert>
+        )}
+      </div>
 
       <div className="section-head">
         <h2>Past bouts</h2>

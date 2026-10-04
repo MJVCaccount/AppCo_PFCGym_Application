@@ -65,6 +65,47 @@ export function futureConfirmedWhere(now: Date): Prisma.BookingWhereInput {
   };
 }
 
+/** Who to tell when the gym cancels a booking, and which session it was. */
+export interface CancelledBookingNotice {
+  fullName: string;
+  email: string;
+  className: string;
+  day: DayKey;
+  startsAt: string;
+  /** ISO date, "YYYY-MM-DD". */
+  sessionDate: string;
+}
+
+/**
+ * The people behind the future Confirmed bookings that cancelFutureConfirmed
+ * is about to cancel. Read inside the same transaction, before the update.
+ */
+export async function listFutureConfirmedNotices(
+  tx: Prisma.TransactionClient,
+  scope: { memberId: number } | { gymClassId: number },
+  now: Date,
+): Promise<CancelledBookingNotice[]> {
+  const rows = await tx.booking.findMany({
+    where: { ...scope, ...futureConfirmedWhere(now) },
+    orderBy: { id: "asc" },
+    take: MAX_LISTED,
+    select: {
+      sessionDate: true,
+      member: { select: { user: { select: { fullName: true, email: true } } } },
+      gymClass: { select: { name: true, day: true, startsAt: true } },
+    },
+  });
+
+  return rows.map((row) => ({
+    fullName: row.member.user.fullName,
+    email: row.member.user.email,
+    className: row.gymClass.name,
+    day: row.gymClass.day,
+    startsAt: row.gymClass.startsAt,
+    sessionDate: isoDate(row.sessionDate),
+  }));
+}
+
 /**
  * Cancels every future Confirmed booking of one member or one class and
  * returns how many there were. Always called inside the transaction that

@@ -18,9 +18,12 @@ import {
 import {
   archiveCoach,
   createCoach,
+  resendInvite,
   restoreCoach,
   updateCoach,
 } from "@/lib/services/coachAdminService";
+import { setEnquiryHandled } from "@/lib/services/contactService";
+import { reviewDocument } from "@/lib/services/documentService";
 import {
   cancelEvent,
   completeEvent,
@@ -304,6 +307,16 @@ export async function archiveCoachAction(data: FormData): Promise<void> {
   );
 }
 
+export async function resendInviteAction(data: FormData): Promise<void> {
+  const session = await requireRole("/admin/coaches", "Admin");
+
+  finish(
+    await resendInvite(session, toInt(data.get("id"))),
+    "/admin/coaches",
+    "Invitation sent. Any earlier link no longer works.",
+  );
+}
+
 export async function restoreCoachAction(data: FormData): Promise<void> {
   const session = await requireRole("/admin/coaches", "Admin");
 
@@ -582,6 +595,43 @@ export async function recordResultAction(
   }
 
   succeeded(path, "Result saved.");
+}
+
+// ---------------------------------------------------------------- documents
+
+/** Approve or reject a fighter's document. Rejecting needs a note. */
+export async function reviewDocumentAction(data: FormData): Promise<void> {
+  const session = await requireRole("/admin/documents", "Admin");
+  const decision = text(data.get("decision"));
+
+  finish(
+    await reviewDocument(
+      session,
+      toInt(data.get("id")),
+      decision,
+      text(data.get("note")),
+    ),
+    "/admin/documents",
+    decision === "Approved" ? "Document approved." : "Document rejected.",
+  );
+}
+
+// ---------------------------------------------------------------- enquiries
+
+/** Mark an enquiry handled, or reopen it, and stay on the same page of the inbox. */
+export async function setEnquiryHandledAction(data: FormData): Promise<void> {
+  const session = await requireRole("/admin/enquiries", "Admin");
+
+  const page = text(data.get("page")).trim();
+  const path =
+    page && page !== "1" ? `/admin/enquiries?page=${encodeURIComponent(page)}` : "/admin/enquiries";
+  const handled = text(data.get("handled")) === "true";
+
+  finish(
+    await setEnquiryHandled(session, toInt(data.get("id")), handled),
+    path,
+    handled ? "Marked as handled." : "Enquiry reopened.",
+  );
 }
 
 // ---------------------------------------------------------------- plans

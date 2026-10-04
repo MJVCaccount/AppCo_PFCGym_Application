@@ -2,6 +2,7 @@
 
 import { useActionState } from "react";
 
+import ImageUploadField from "@/components/admin/ImageUploadField";
 import Alert from "@/components/Alert";
 import SubmitButton from "@/components/SubmitButton";
 import TextField from "@/components/TextField";
@@ -44,6 +45,7 @@ export default function EventForm({ action, initial, submitLabel }: Props) {
         defaultValue={value("imageUrl")}
         error={error("imageUrl")}
       />
+      <ImageUploadField label="Upload a poster" />
       <TextField name="description" label="Description" multiline full defaultValue={value("description")} error={error("description")} />
 
       {state.message && (

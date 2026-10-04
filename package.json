@@ -9,7 +9,7 @@
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
-    "test": "node --conditions=react-server -r tsx/cjs tests/dates.test.ts && node --conditions=react-server -r tsx/cjs -r ./tests/support/register.cjs tests/session.test.ts && node --conditions=react-server -r tsx/cjs tests/logic.test.ts && node --conditions=react-server -r tsx/cjs -r ./tests/support/register.cjs tests/api.test.ts && node --conditions=react-server -r tsx/cjs -r ./tests/support/register.cjs tests/fighters.test.ts && node --conditions=react-server -r tsx/cjs -r ./tests/support/register.cjs tests/admin.test.ts && node --conditions=react-server -r tsx/cjs -r ./tests/support/register.cjs tests/hostile-input.test.ts",
+    "test": "node --conditions=react-server -r tsx/cjs tests/dates.test.ts && node --conditions=react-server -r tsx/cjs -r ./tests/support/register.cjs tests/session.test.ts && node --conditions=react-server -r tsx/cjs tests/logic.test.ts && node --conditions=react-server -r tsx/cjs -r ./tests/support/register.cjs tests/api.test.ts && node --conditions=react-server -r tsx/cjs -r ./tests/support/register.cjs tests/fighters.test.ts && node --conditions=react-server -r tsx/cjs -r ./tests/support/register.cjs tests/admin.test.ts && node --conditions=react-server -r tsx/cjs -r ./tests/support/register.cjs tests/hostile-input.test.ts && node --conditions=react-server -r tsx/cjs -r ./tests/support/register.cjs tests/email.test.ts && node --conditions=react-server -r tsx/cjs -r ./tests/support/register.cjs tests/password.test.ts && node --conditions=react-server -r tsx/cjs -r ./tests/support/register.cjs tests/uploads.test.ts",
     "postinstall": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:seed": "prisma db seed",
@@ -22,9 +22,11 @@
   },
   "dependencies": {
     "@prisma/client": "^6.19.3",
+    "@vercel/blob": "^2.8.0",
     "next": "15.5.27",
     "react": "19.1.9",
     "react-dom": "19.1.9",
+    "resend": "^6.32.0",
     "server-only": "^0.0.1"
   },
   "devDependencies": {

@@ -6,8 +6,10 @@ import { gymDateAndTime, nextOccurrence } from "@/lib/dates";
 import { prisma } from "@/lib/prisma";
 import { record as audit } from "@/lib/repositories/auditRepository";
 import {
+  type CancelledBookingNotice,
   cancelFutureConfirmed,
   futureConfirmedWhere,
+  listFutureConfirmedNotices,
 } from "@/lib/repositories/bookingsRepository";
 import type {
   AdminClass,
@@ -329,7 +331,12 @@ export async function updateClass(
 }
 
 export type DeactivateClassResult =
-  | { ok: true; cancelledBookings: number }
+  | {
+      ok: true;
+      cancelledBookings: number;
+      /** One per cancelled booking, so each member can be told. */
+      notices: CancelledBookingNotice[];
+    }
   | { ok: false; reason: "not-found" | "already-inactive" }
   | { ok: false; reason: "has-bookings"; count: number };
 
@@ -354,6 +361,10 @@ export async function deactivateClass(
       return { ok: false, reason: "has-bookings", count };
     }
 
+    const notices =
+      count > 0
+        ? await listFutureConfirmedNotices(tx, { gymClassId: id }, now)
+        : [];
     const cancelledBookings =
       count > 0 ? await cancelFutureConfirmed(tx, { gymClassId: id }, now) : 0;
 
@@ -369,7 +380,7 @@ export async function deactivateClass(
       tx,
     );
 
-    return { ok: true, cancelledBookings };
+    return { ok: true, cancelledBookings, notices };
   }, TRANSACTION_OPTIONS);
 }
 

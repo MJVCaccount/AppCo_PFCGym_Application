@@ -17,6 +17,7 @@ const coachSelect = {
   coachId: true,
   title: true,
   bio: true,
+  imageUrl: true,
   user: { select: { fullName: true } },
 } satisfies Prisma.CoachSelect;
 
@@ -28,6 +29,7 @@ function toCoach(row: CoachRow): Coach {
     name: row.user.fullName,
     role: row.title,
     bio: row.bio,
+    imageUrl: row.imageUrl,
   };
 }
 

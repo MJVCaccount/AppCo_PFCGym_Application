@@ -77,6 +77,8 @@ export interface Coach {
   name: string;
   role: string;
   bio: string;
+  /** A public image from the Blob store, or null for the monogram. */
+  imageUrl: string | null;
 }
 
 /** A monthly membership tier. */
@@ -338,6 +340,58 @@ export interface AuditLogRow {
   action: string;
   entity: string;
   entityId: number | null;
+}
+
+export type DocumentType = "Medical" | "Licence" | "Other";
+
+export const DOCUMENT_TYPES: readonly DocumentType[] = [
+  "Medical",
+  "Licence",
+  "Other",
+];
+
+export type DocumentStatus = "Pending" | "Approved" | "Rejected";
+
+/** A fighter's uploaded document as the fighter sees it. No file location. */
+export interface FighterDocument {
+  id: number;
+  type: DocumentType;
+  fileName: string;
+  status: DocumentStatus;
+  reviewNote: string | null;
+  /** ISO-8601 UTC instant. */
+  uploadedAt: string;
+}
+
+/** A document in the admin review queue. */
+export interface ReviewDocument extends FighterDocument {
+  fighterId: number;
+  fighterName: string;
+  /** ISO-8601 UTC instant, or null while unreviewed. */
+  reviewedAt: string | null;
+}
+
+/** One contact-form message as the admin inbox shows it. */
+export interface Enquiry {
+  id: number;
+  fullName: string;
+  email: string;
+  phone: string | null;
+  message: string;
+  /** ISO-8601 UTC instant. */
+  createdAt: string;
+  /** When the gym's copy was emailed, or null if it was not. */
+  emailSentAt: string | null;
+  /** ISO-8601 UTC instant, or null while unhandled. */
+  handledAt: string | null;
+}
+
+export interface EnquiryPage {
+  items: Enquiry[];
+  total: number;
+  page: number;
+  pageSize: number;
+  pageCount: number;
 }
 
 // ---------------------------------------------------------------- coach

@@ -24,6 +24,22 @@ try {
   // No .env file: rely on the environment.
 }
 
+// The developer's .env may hold real vendor credentials. Tests never use them:
+// they are blanked here, and tests that need email or storage configured set
+// their own values (against the stubs in tests/support).
+for (const name of [
+  "RESEND_API_KEY",
+  "EMAIL_FROM",
+  "CONTACT_INBOX",
+  "PUBLIC_BLOB_STORE_ID",
+  "PRIVATE_BLOB_STORE_ID",
+  "PUBLIC_BLOB_READ_WRITE_TOKEN",
+  "PRIVATE_BLOB_READ_WRITE_TOKEN",
+  "VERCEL_OIDC_TOKEN",
+]) {
+  process.env[name] = "";
+}
+
 /**
  * Host, port and database name, with Neon's "-pooler" suffix removed, so the
  * pooled and direct strings of one database compare as the same database.

@@ -133,12 +133,38 @@ export async function createCoach(
   }
 
   try {
-    await inviteService.sendCoachInvite(coach.id);
+    await inviteService.sendCoachInvite(coach.id, session.id);
   } catch (e) {
     logger.warn("Coach invite failed", { coachId: coach.id, error: e });
   }
 
   return succeed(coach, 201);
+}
+
+/**
+ * Sends a coach a fresh invitation. The earlier link, if unused, stops
+ * working. Unlike createCoach, a failure here is reported: the admin pressed
+ * the button to make it happen.
+ */
+export async function resendInvite(
+  session: SessionUser,
+  id: unknown,
+): Promise<ServiceResult<{ id: number }>> {
+  if (!isAdmin(session)) return fail(403, ADMIN_ONLY);
+  if (!isValidId(id)) return fail(400, "id must be a positive integer.");
+
+  try {
+    const coach = (await listAllCoaches()).find((c) => c.id === id);
+    if (!coach) return fail(404, NOT_FOUND_COACH);
+    if (!coach.isActive) {
+      return fail(409, "Restore this coach before sending an invitation.");
+    }
+
+    await inviteService.sendCoachInvite(id, session.id);
+    return succeed({ id });
+  } catch (e) {
+    return failure(e);
+  }
 }
 
 export async function updateCoach(

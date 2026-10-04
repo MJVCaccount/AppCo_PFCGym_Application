@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 
 import { offerBoutAction } from "@/actions/admin";
 import Alert from "@/components/Alert";
@@ -11,16 +11,31 @@ import { EMPTY_FORM_STATE } from "@/lib/validation";
 
 interface Props {
   eventId: number;
-  fighters: { id: number; name: string }[];
+  fighters: { id: number; name: string; hasApprovedMedical: boolean }[];
 }
 
-/** Offer a bout at one event to a fighter. */
+/**
+ * Offer a bout at one event to a fighter. A fighter with no approved medical
+ * document is flagged, but the offer is still allowed: it is a warning only.
+ */
 export default function OfferForm({ eventId, fighters }: Props) {
   const [state, formAction] = useActionState(offerBoutAction, EMPTY_FORM_STATE);
   const error = (name: string) => state.errors?.[name];
+  const [chosen, setChosen] = useState(state.values?.fighterId ?? "");
+  const noMedical = fighters.some(
+    (f) => String(f.id) === chosen && !f.hasApprovedMedical,
+  );
 
   return (
-    <form className="form form--split" action={formAction} noValidate>
+    <form
+      className="form form--split"
+      action={formAction}
+      noValidate
+      onChange={(event) => {
+        const target = event.target as HTMLSelectElement;
+        if (target.name === "fighterId") setChosen(target.value);
+      }}
+    >
       <input type="hidden" name="eventId" value={eventId} />
 
       <SelectField
@@ -28,8 +43,18 @@ export default function OfferForm({ eventId, fighters }: Props) {
         label="Fighter"
         defaultValue={state.values?.fighterId}
         error={error("fighterId")}
-        options={fighters.map((f) => ({ value: String(f.id), label: f.name }))}
+        options={fighters.map((f) => ({
+          value: String(f.id),
+          label: f.hasApprovedMedical ? f.name : `${f.name} (no approved medical)`,
+        }))}
       />
+      {noMedical && (
+        <div className="field">
+          <span className="tag tag--red" role="status">
+            No approved medical on file
+          </span>
+        </div>
+      )}
       <TextField
         name="opponentName"
         label="Opponent"

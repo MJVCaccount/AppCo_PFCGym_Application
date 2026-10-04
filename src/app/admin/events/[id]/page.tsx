@@ -7,6 +7,7 @@ import Notices from "@/components/admin/Notices";
 import OfferForm from "@/components/admin/OfferForm";
 import ResultForm from "@/components/admin/ResultForm";
 import { formatEventDate } from "@/lib/dates";
+import { listFightersWithApprovedMedical } from "@/lib/services/documentService";
 import { getEventDetail } from "@/lib/services/eventService";
 import { listFightersForAdmin } from "@/lib/services/fighterService";
 import { firstParam, type SearchParams } from "@/lib/types";
@@ -32,10 +33,12 @@ export default async function AdminEventDetailPage({
   const session = await requireRole(`/admin/events/${rawId}`, "Admin");
 
   const eventId = /^\d+$/.test(rawId) ? Number(rawId) : NaN;
-  const [detail, fighters] = await Promise.all([
+  const [detail, fighters, medical] = await Promise.all([
     getEventDetail(session, eventId),
     listFightersForAdmin(session),
+    listFightersWithApprovedMedical(session),
   ]);
+  const withMedical = new Set(medical.data ?? []);
   if (!detail.ok || !detail.data) {
     if (detail.status === 404 || detail.status === 400) notFound();
     throw new Error("The event could not be loaded.");
@@ -47,7 +50,11 @@ export default async function AdminEventDetailPage({
   const offered = new Set(offers.map((o) => o.fighterId));
   const available = (fighters.data ?? [])
     .filter((f) => !offered.has(f.id))
-    .map((f) => ({ id: f.id, name: f.fullName }));
+    .map((f) => ({
+      id: f.id,
+      name: f.fullName,
+      hasApprovedMedical: withMedical.has(f.id),
+    }));
   const resultOffers = past
     ? offers.filter((o) => o.availability === "Accepted")
     : [];

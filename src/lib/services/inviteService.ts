@@ -1,5 +1,8 @@
 import "server-only";
 
+import { findById } from "@/lib/repositories/usersRepository";
+import { sendInvite } from "@/lib/services/passwordService";
+
 /**
  * Invitations for accounts an admin creates on someone's behalf.
  *
@@ -8,13 +11,19 @@ import "server-only";
  */
 export const inviteService = {
   /**
-   * Tells a newly created coach how to set their password.
+   * Tells a coach how to set their password: a single-use link, valid for 7
+   * days, sent by email. Any earlier unused link for the account stops
+   * working. `actorId` is the admin, for the audit trail.
    *
-   * Nothing is sent yet: the invite email arrives with the email work. The
-   * coach service already calls this at the right moment, after the account
-   * is committed, so only this body has to change.
+   * It throws if the account cannot be found or the token cannot be stored;
+   * the coach service catches that, so a failed invite never undoes the coach.
    */
-  async sendCoachInvite(userId: number): Promise<void> {
-    void userId;
+  async sendCoachInvite(userId: number, actorId: number): Promise<void> {
+    const user = await findById(userId);
+    if (!user || !user.isActive) {
+      throw new Error(`No active account ${userId} to invite`);
+    }
+
+    await sendInvite(user, actorId);
   },
 };

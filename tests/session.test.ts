@@ -5,6 +5,7 @@
  * use real account ids rather than made-up ones.
  */
 import assert from "node:assert/strict";
+import { createHmac } from "node:crypto";
 import { cookies } from "next/headers";
 
 import { resetDatabase, testDb } from "./helpers/db";
@@ -111,6 +112,50 @@ async function main() {
     await destroySession();
     assert.equal(await getSession(), null);
     assert.equal(await isSignedIn(), false);
+  });
+
+  console.log("\nSESSION VERSION");
+
+  /** A correctly signed cookie with exactly this payload. */
+  function signedCookie(payload: Record<string, unknown>): string {
+    const secret = process.env.SESSION_SECRET;
+    assert.ok(secret && secret.length >= 32, "tests run with a real SESSION_SECRET");
+    const body = Buffer.from(JSON.stringify(payload)).toString("base64url");
+    return `${body}.${createHmac("sha256", secret).update(body).digest("base64url")}`;
+  }
+
+  await check("a validly signed cookie with no sv is rejected", async () => {
+    const store = await cookies();
+    store.set("pfc_session", signedCookie({ ...admin }));
+    assert.equal(await getSession(), null);
+
+    store.set("pfc_session", signedCookie({ ...admin, sv: "0" }));
+    assert.equal(await getSession(), null, "sv must be a number");
+
+    store.set("pfc_session", signedCookie({ ...admin, sv: 0 }));
+    assert.deepEqual(await getSession(), admin, "the same cookie with a numeric sv works");
+  });
+
+  await check("a cookie issued under an older sessionVersion is rejected", async () => {
+    await createSession(fighter);
+    assert.deepEqual(await getSession(), fighter);
+
+    const store = await cookies();
+    const old = store.get("pfc_session")!.value;
+
+    await testDb.user.update({
+      where: { id: fighter.id },
+      data: { sessionVersion: { increment: 1 } },
+    });
+    assert.equal(await getSession(), null, "stale sv rejected");
+
+    // A session issued afterwards carries the new version.
+    await createSession(fighter);
+    assert.deepEqual(await getSession(), fighter);
+
+    // And the old cookie stays dead.
+    store.set("pfc_session", old);
+    assert.equal(await getSession(), null);
   });
 
   console.log("\nLIVE ROLE AND ACTIVE STATE");

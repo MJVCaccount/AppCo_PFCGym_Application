@@ -73,21 +73,24 @@ enum DocumentStatus {
 }
 
 model User {
-  id           Int                  @id @default(autoincrement())
-  email        String               @unique
-  fullName     String
-  phone        String?
-  role         Role
-  passwordHash String
-  passwordSalt String
-  isActive     Boolean              @default(true)
-  createdAt    DateTime             @default(now())
-  updatedAt    DateTime             @updatedAt
-  member       Member?
-  coach        Coach?
-  admin        Admin?
-  resetTokens  PasswordResetToken[]
-  auditLogs    AuditLog[]
+  id             Int                  @id @default(autoincrement())
+  email          String               @unique
+  fullName       String
+  phone          String?
+  role           Role
+  passwordHash   String
+  passwordSalt   String
+  isActive       Boolean              @default(true)
+  // Bumped to sign out every session of this account (password reset). The
+  // session cookie carries the value it was issued under.
+  sessionVersion Int                  @default(0)
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+  member         Member?
+  coach          Coach?
+  admin          Admin?
+  resetTokens    PasswordResetToken[]
+  auditLogs      AuditLog[]
 
   @@index([role])
 }

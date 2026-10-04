@@ -1,5 +1,6 @@
 import "server-only";
 
+import { logger } from "@/lib/logger";
 import {
   createEvent as insertEvent,
   type EventFields,
@@ -9,12 +10,18 @@ import {
   setStatus,
   updateEvent as updateRow,
 } from "@/lib/repositories/eventsRepository";
+import { findById } from "@/lib/repositories/usersRepository";
 import {
   createOffer,
   listForEvent,
+  listOfferRecipients,
   setAvailability,
   setResult,
 } from "@/lib/repositories/participationsRepository";
+import {
+  notifyBoutOffered,
+  notifyEventCancelled,
+} from "@/lib/services/notificationService";
 import {
   ADMIN_ONLY,
   fail,
@@ -302,13 +309,32 @@ async function changeStatus(
   }
 }
 
-/** Marks an event Cancelled. The row, its offers and its results are kept. */
+/**
+ * Marks an event Cancelled. The row, its offers and its results are kept, and
+ * every fighter with an offer is emailed.
+ */
 export async function cancelEvent(
   session: SessionUser,
   eventId: unknown,
   now: Date = new Date(),
 ): Promise<ServiceResult<CompetitionEvent>> {
-  return changeStatus(session, eventId, "Cancelled", now);
+  const result = await changeStatus(session, eventId, "Cancelled", now);
+
+  if (result.ok && result.data) {
+    try {
+      notifyEventCancelled(
+        await listOfferRecipients(result.data.id),
+        result.data,
+      );
+    } catch (e) {
+      logger.warn("Event cancellation emails not queued", {
+        eventId: result.data.id,
+        error: e,
+      });
+    }
+  }
+
+  return result;
 }
 
 /** Marks an event Completed, once its date has passed. */
@@ -321,6 +347,19 @@ export async function completeEvent(
 }
 
 // ---------------------------------------------------------------- offers
+
+/** Emails the fighter about a new offer. The offer is saved whatever happens here. */
+async function tellFighterOfOffer(
+  fighterId: number,
+  offer: BoutOffer,
+): Promise<void> {
+  try {
+    const fighter = await findById(fighterId);
+    if (fighter) notifyBoutOffered(fighter, offer);
+  } catch (e) {
+    logger.warn("Bout offer email not queued", { fighterId, error: e });
+  }
+}
 
 export async function offerBout(
   session: SessionUser,
@@ -380,6 +419,8 @@ export async function offerBout(
           return fail(409, "That fighter already has an offer for this event.");
       }
     }
+
+    await tellFighterOfOffer(fighterId, result.offer);
 
     return succeed(result.offer, 201);
   } catch (e) {

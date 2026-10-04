@@ -36,7 +36,7 @@ export default function LoginForm({ returnUrl }: { returnUrl?: string }) {
       >
         <p style={{ textAlign: "right", marginTop: 8 }}>
           <Link
-            href="#"
+            href="/forgot-password"
             style={{
               fontSize: 11,
               color: "var(--red)",

@@ -101,6 +101,26 @@ export async function listForEvent(eventId: number): Promise<BoutOffer[]> {
   return rows.map(toOffer);
 }
 
+/** The name and address of every fighter with an offer for one event. */
+export async function listOfferRecipients(
+  eventId: number,
+): Promise<{ fullName: string; email: string }[]> {
+  const rows = await prisma.eventParticipation.findMany({
+    where: { eventId },
+    orderBy: { id: "asc" },
+    take: MAX_LISTED,
+    select: {
+      fighter: {
+        select: {
+          member: { select: { user: { select: { fullName: true, email: true } } } },
+        },
+      },
+    },
+  });
+
+  return rows.map((row) => row.fighter.member.user);
+}
+
 /** Unanswered offers for events that are still to come. */
 export async function countPending(now: Date = new Date()): Promise<number> {
   return prisma.eventParticipation.count({

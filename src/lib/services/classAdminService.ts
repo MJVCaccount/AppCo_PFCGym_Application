@@ -14,6 +14,7 @@ import {
   updateClass,
   updateProgramme as updateProgrammeRow,
 } from "@/lib/repositories/classAdminRepository";
+import { notifyBookingsCancelledByGym } from "@/lib/services/notificationService";
 import {
   ADMIN_ONLY,
   fail,
@@ -330,6 +331,8 @@ export async function deactivateSession(
           );
       }
     }
+
+    notifyBookingsCancelledByGym(result.notices);
 
     return succeed({ id, cancelledBookings: result.cancelledBookings });
   } catch (e) {

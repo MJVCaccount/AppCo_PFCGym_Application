@@ -4,6 +4,7 @@ import Link from "next/link";
 import {
   archiveCoachAction,
   createCoachAction,
+  resendInviteAction,
   restoreCoachAction,
   updateCoachAction,
 } from "@/actions/admin";
@@ -99,6 +100,18 @@ export default async function AdminCoachesPage({
                       >
                         Edit
                       </Link>
+                      {c.isActive && (
+                        <form action={resendInviteAction}>
+                          <input type="hidden" name="id" value={c.id} />
+                          <button
+                            className="btn btn--grey btn--sm"
+                            type="submit"
+                            aria-label={`Resend invite to ${c.name}`}
+                          >
+                            Resend invite
+                          </button>
+                        </form>
+                      )}
                       {c.isActive ? (
                         <Link
                           className="btn btn--line btn--sm"

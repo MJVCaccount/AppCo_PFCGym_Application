@@ -22,6 +22,9 @@ export default async function LoginPage({
   const params = await searchParams;
   const returnUrl = firstParam(params.returnUrl);
   const registered = firstParam(params.registered);
+  // Only a known message is shown: a link must not be able to put its own
+  // words on the sign-in page.
+  const updated = firstParam(params.notice) === "Password updated";
 
   // Already signed in? There is nothing to do here.
   if (await getSession()) redirect("/dashboard");
@@ -43,6 +46,10 @@ export default async function LoginPage({
 
         {registered && (
           <Alert kind="ok">Account created. Sign in to continue.</Alert>
+        )}
+
+        {updated && (
+          <Alert kind="ok">Password updated. Sign in with your new password.</Alert>
         )}
 
         <LoginForm returnUrl={safeReturn} />

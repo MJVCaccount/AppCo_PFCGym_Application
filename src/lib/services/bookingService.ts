@@ -8,6 +8,7 @@ import {
   listForMember,
 } from "@/lib/repositories/bookingsRepository";
 import { getSlot } from "@/lib/repositories/timetableRepository";
+import { notifyBookingConfirmed } from "@/lib/services/notificationService";
 import {
   type Booking,
   isMemberRole,
@@ -88,6 +89,9 @@ export async function createBooking(
           };
       }
     }
+
+    // Told after the response, and only once the booking is committed.
+    notifyBookingConfirmed(session, result.booking);
 
     return {
       ok: true,

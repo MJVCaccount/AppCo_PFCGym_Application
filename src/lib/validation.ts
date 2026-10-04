@@ -25,6 +25,12 @@ const PHONE_PATTERN = /^[+\d][\d\s()-]{8,}$/;
 const TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/;
 const MAX_URL_LENGTH = 2048;
 
+export const MAX_NAME = 100;
+export const MAX_EMAIL = 254;
+export const MAX_PHONE = 30;
+export const MAX_MESSAGE = 2000;
+export const MAX_PASSWORD = 128;
+
 function lengthBetween(value: string, min: number, max: number): boolean {
   const length = value.trim().length;
   return length >= min && length <= max;
@@ -32,10 +38,13 @@ function lengthBetween(value: string, min: number, max: number): boolean {
 
 export const RULES = {
   name(value: string): string | null {
-    return value.trim().length >= 2 ? null : "Please enter your full name.";
+    const length = value.trim().length;
+    if (length > MAX_NAME) return `Name must be at most ${MAX_NAME} characters.`;
+    return length >= 2 ? null : "Please enter your full name.";
   },
 
   email(value: string): string | null {
+    if (value.trim().length > MAX_EMAIL) return "That email address is too long.";
     return EMAIL_PATTERN.test(value.trim())
       ? null
       : "Enter a valid email address, e.g. you@example.co.za";
@@ -44,19 +53,29 @@ export const RULES = {
   /** Optional: blank passes. */
   phone(value: string): string | null {
     if (value.trim() === "") return null;
+    if (value.trim().length > MAX_PHONE) return "That phone number is too long.";
     return PHONE_PATTERN.test(value.trim())
       ? null
       : "Enter a valid phone number, or leave it blank.";
   },
 
   password(value: string): string | null {
+    // The ceiling matters: scrypt on an enormous string is a way to tie the
+    // server up.
+    if (value.length > MAX_PASSWORD) {
+      return `Password must be at most ${MAX_PASSWORD} characters.`;
+    }
     return value.length >= 8
       ? null
       : "Password must be at least 8 characters.";
   },
 
   message(value: string): string | null {
-    return value.trim().length >= 10
+    const length = value.trim().length;
+    if (length > MAX_MESSAGE) {
+      return `Message must be at most ${MAX_MESSAGE} characters.`;
+    }
+    return length >= 10
       ? null
       : "Tell us a little more — at least 10 characters.";
   },
