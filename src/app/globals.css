@@ -641,13 +641,13 @@ button.pill-link:hover{background:#fff;color:#000}
    changes. Below 1024px every interactive control is at least 44px tall;
    from 1024px nothing that stands alone is under 24px. */
 .header__login,.nav a,.footer details li a,.footer__legal a,.footer .contact-list a,
-.form-note a,.auth a:not(.btn){
+.field a[href="/forgot-password"]{
   display:inline-flex;align-items:center;min-height:24px;
 }
 .toggle-pw{min-height:24px}
 @media (max-width:1023px){
   .header__login,.footer details li a,.footer__legal a,.footer .contact-list a,
-  .form-note a,.auth a:not(.btn){min-height:44px}
+  .field a[href="/forgot-password"]{min-height:44px}
   .btn--sm{min-height:44px}
   .pill-link,button.pill-link{min-height:44px}
   .toggle-pw{min-height:44px}

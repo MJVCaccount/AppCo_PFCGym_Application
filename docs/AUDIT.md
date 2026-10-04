@@ -71,7 +71,7 @@ Findings:
 | `changePlan`, `cancelMembership` | Member, Fighter | `getSession` | `membershipService` (403 for staff) |
 | `respondToOfferAction` | Fighter | `getSession` | `eventService.respondToOffer` |
 | `markAttendanceAction` | Coach, Admin | `requireRole` | `coachService.markAttendance` (coach scoped to own classes, 404 otherwise) |
-| 29 admin actions in `admin.ts` (classes, programmes, coaches, members, fighters, events, offers, results, documents, enquiries, plans) | Admin | `requireRole(..., "Admin")` first line of each | every service starts with `isAdmin` |
+| 30 admin actions in `admin.ts` (counted with `grep -c "export async function" src/actions/admin.ts`; this audit first said 29) (classes, programmes, coaches, members, fighters, events, offers, results, documents, enquiries, plans) | Admin | `requireRole(..., "Admin")` first line of each | every service starts with `isAdmin` |
 
 No action lacks a role check. **P2**: admin and coach actions have no rate limit (same reasoning as above).
 
@@ -177,7 +177,7 @@ Verified against `prisma/seedGuard.ts`, `prisma/seed.ts` and `tests/seed-guard.t
 
 ## 15. Tests
 
-Twelve files in `tests/` (`dates`, `session`, `logic`, `api`, `fighters`, `admin`, `hostile-input`, `email`, `password`, `uploads`, `security`, `seed-guard`). The rubric asks for 15 or more. There are no end-to-end flow scenarios per user type yet (Part 2, section B).
+Twelve files in `tests/` at the time of this audit (`dates`, `session`, `logic`, `api`, `fighters`, `admin`, `hostile-input`, `email`, `password`, `uploads`, `security`, `seed-guard`); the suite is now 16 files and 471 checks. The rubric asks for 15 or more. There are no end-to-end flow scenarios per user type yet (Part 2, section B).
 
 ## Prioritised fix list
 

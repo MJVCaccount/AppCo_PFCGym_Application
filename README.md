@@ -31,7 +31,7 @@ npm run dev                  # http://localhost:3000
 | `npm run build` / `npm start` | Production build, and serve it |
 | `npm run lint` | `next lint` |
 | `npm run typecheck` | `tsc --noEmit` |
-| `npm test` | All 15 test files, against `TEST_DATABASE_URL` (empties every table there) |
+| `npm test` | All 16 test files (471 checks), against `TEST_DATABASE_URL` (empties every table there) |
 | `npm run ci` | lint, typecheck, test and build, as CI does |
 | `npm run db:migrate` | `prisma migrate dev` (create a migration) |
 | `npm run db:deploy` | `prisma migrate deploy` (apply migrations) |
@@ -132,7 +132,7 @@ Deployment below.
 │   ├── middleware.ts         page gate and the per-request CSP nonce
 │   └── instrumentation.ts    start-up checks (APP_URL, SESSION_SECRET)
 ├── prisma/                   schema.prisma, migrations/, seed.ts, seedGuard.ts
-├── tests/                    15 test files and their helpers and stubs
+├── tests/                    16 test files and their helpers and stubs
 ├── scripts/smoke.mjs         post-deploy smoke test
 ├── docs/                     OPERATIONS.md (running the system), AUDIT.md (final audit)
 ├── .github/                  CI and deploy workflows, pull request template
@@ -335,7 +335,7 @@ page load and no layout shift as the font swaps in.
 
 ## Tests
 
-Fifteen files in `tests/`, run in order by `npm test`. Most of them talk to a
+Sixteen files in `tests/` (471 checks), run in order by `npm test`. Most of them talk to a
 real PostgreSQL database that the tests empty and re-seed, so `TEST_DATABASE_URL`
 must name a database you do not mind losing (it must differ from `DATABASE_URL`
 and `DIRECT_URL`, or the tests refuse to run). "resend" and "@vercel/blob" are
@@ -355,8 +355,8 @@ npm test
 |---|---|
 | `dates`, `session`, `logic`, `config` | Johannesburg time rules, cookie signing and tampering, data and validation, redirect guard, image links, rate-limit multiplier, start-up checks |
 | `api`, `fighters`, `admin`, `uploads`, `password`, `email` | Booking and cancellation routes, bout offers and results, admin and coach services, uploads and the private store, password reset, email templates and queue |
-| `hostile-input`, `security`, `rate-limit-multiplier`, `seed-guard` | Hostile input on every service, rate limiter, origin and body checks, CSP and headers, seed refusal rules |
-| `flows` | One scripted scenario each for a guest, a new member, a member on a full class, a fighter, a coach, an admin and a hostile user |
+| `hostile-input`, `security`, `rate-limit-multiplier`, `seed-guard`, `seed-passwords` | Hostile input on every service, rate limiter, origin and body checks, CSP and headers, seed refusal rules and seed passwords |
+| `flows` | One scripted scenario each for a guest, a new member, a member on a full class, a fighter, a coach, an admin (including the `/admin` redirect) and a hostile user |
 
 ---
 

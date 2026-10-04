@@ -34,3 +34,7 @@ Sum check: 23+15+68+34+46+51+16+22+13+26+79+19+12+6+6+32 = 468.
 * The tests use stubs for Resend and Vercel Blob (`tests/support/resend-stub.ts`, `tests/support/vercel-blob-stub.ts`); no email was sent and no Blob store was reached. Behaviour against the real Resend or Blob services: **not verified** by this run.
 * `npm run lint`, `npm run typecheck`, `npm run build` and `npm audit` were not run for this document.
 * A first attempt at this run was invalid: an earlier test process was still alive and shared `pfc_test`, which made `tests/logic.test.ts` fail on a stray row. That process was killed and the whole suite rerun from scratch; the numbers above are from the clean rerun.
+
+## Update 2026-10-04 (after the browser-check fixes)
+
+A later full run of `npm test` passed **471 checks in 16 files**: `tests/flows.test.ts` went from 32 to 35 checks (the three new `/admin` redirect checks); every other count above is unchanged.
