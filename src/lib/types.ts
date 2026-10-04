@@ -1,18 +1,34 @@
 /**
  * Domain types for the PFC site.
  *
- * These mirror the shape the database will take in Part 2, so swapping the
- * in-memory data module for Prisma or Drizzle queries means changing
- * `gym-data.ts` and `users.ts` only — nothing in a page or component.
+ * These are the plain shapes the repositories hand to pages and components:
+ * strings, numbers, booleans and arrays only, so every one of them can cross
+ * to a client component. Dates travel as ISO strings.
  */
 
-export type Role = "Member" | "Coach" | "Admin";
+export type Role = "Member" | "Fighter" | "Coach" | "Admin";
 
 export const ROLES = {
   Member: "Member",
+  Fighter: "Fighter",
   Coach: "Coach",
   Admin: "Admin",
 } as const;
+
+/** A fighter is a member with a fight record, so both hold a membership. */
+export function isMemberRole(role: Role): boolean {
+  return role === ROLES.Member || role === ROLES.Fighter;
+}
+
+export type ClassKind = "Group" | "Private" | "Kids" | "Fighters";
+
+export type BookingStatus =
+  | "Pending"
+  | "Confirmed"
+  | "Failed"
+  | "Completed"
+  | "Cancelled"
+  | "NoShow";
 
 /** Monday = 1 … Sunday = 7, matching ISO-8601 so sorting is natural. */
 export type DayKey =
@@ -81,7 +97,24 @@ export interface TimetableSlot {
   className: string;
   coachName: string;
   capacity: number;
+  /** Confirmed bookings for the class's next session. */
   booked: number;
+  coachId?: number;
+  kind?: ClassKind;
+}
+
+/** A member's reservation for one dated session of a class. */
+export interface Booking {
+  id: number;
+  classId: number;
+  className: string;
+  coachName: string;
+  day: DayKey;
+  /** 24-hour "HH:mm". */
+  startsAt: string;
+  /** ISO date, "YYYY-MM-DD". */
+  sessionDate: string;
+  status: BookingStatus;
 }
 
 /** A published member review. */
@@ -102,16 +135,16 @@ export interface OpeningHours {
   closes: number;
 }
 
-/** An account. `passwordHash`/`passwordSalt` never leave the server. */
-export interface AppUser {
+/** An account as the repositories return it: no password hash or salt. */
+export interface UserAccount {
   id: number;
   email: string;
   fullName: string;
+  phone: string | null;
   role: Role;
-  /** Null for coaches and admins — they are staff, not members. */
+  /** Null for staff, and for a member with no current plan. */
   planId: number | null;
-  passwordHash: string;
-  passwordSalt: string;
+  isActive: boolean;
 }
 
 /** What the signed session cookie carries. Deliberately small. */

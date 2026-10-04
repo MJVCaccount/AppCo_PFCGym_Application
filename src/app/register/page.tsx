@@ -3,7 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import RegisterForm from "@/components/RegisterForm";
-import { getPlans } from "@/lib/gym-data";
+import { getPlans } from "@/lib/repositories/plansRepository";
 import { getSession } from "@/lib/session";
 import { firstParam, type SearchParams } from "@/lib/types";
 
@@ -23,6 +23,8 @@ export default async function RegisterPage({
 
   if (await getSession()) redirect("/dashboard");
 
+  const plans = await getPlans();
+
   return (
     <section className="auth">
       <div className="auth__card">
@@ -31,7 +33,7 @@ export default async function RegisterPage({
         </div>
         <h1>Join PFC</h1>
 
-        <RegisterForm plans={getPlans()} selectedPlanId={planId} />
+        <RegisterForm plans={plans} selectedPlanId={planId} />
 
         <p className="auth__alt">
           Already a member? <Link href="/login">Log in</Link>

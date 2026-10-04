@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
 
+import { logger } from "@/lib/logger";
 import { createBooking } from "@/lib/services/bookingService";
 import { getSession } from "@/lib/session";
+
+export const dynamic = "force-dynamic";
 
 /**
  * POST /api/bookings  { "slotId": number }
@@ -36,7 +39,7 @@ export async function POST(request: Request) {
         ? Number((body as Record<string, unknown>).slotId)
         : NaN;
 
-    const result = createBooking(session, slotId);
+    const result = await createBooking(session, slotId);
 
     if (!result.ok) {
       return NextResponse.json(
@@ -46,7 +49,8 @@ export async function POST(request: Request) {
     }
 
     return NextResponse.json({ data: result.slot }, { status: result.status });
-  } catch {
+  } catch (e) {
+    logger.error("POST /api/bookings failed", { error: e });
     return NextResponse.json(
       { error: { message: "Could not complete the booking." } },
       { status: 500 },

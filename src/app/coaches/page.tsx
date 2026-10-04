@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 
 import CoachCard from "@/components/CoachCard";
 import StickyCta from "@/components/StickyCta";
-import { getCoaches } from "@/lib/gym-data";
+import { getCoaches } from "@/lib/repositories/coachesRepository";
 
 export const metadata: Metadata = {
   title: "Coaches",
@@ -10,8 +10,10 @@ export const metadata: Metadata = {
     "Meet the PFC coaching team: championship boxers, national Muay Thai champions and BJJ black belts.",
 };
 
-export default function CoachesPage() {
-  const coaches = getCoaches();
+export const dynamic = "force-dynamic";
+
+export default async function CoachesPage() {
+  const coaches = await getCoaches();
 
   return (
     <>

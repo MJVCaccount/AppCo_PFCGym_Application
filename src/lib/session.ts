@@ -3,6 +3,7 @@ import "server-only";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
 
+import { ROLES } from "./types";
 import type { Role, SessionUser } from "./types";
 
 /**
@@ -19,6 +20,7 @@ import type { Role, SessionUser } from "./types";
 
 const COOKIE_NAME = "pfc_session";
 const MAX_AGE_SECONDS = 60 * 60 * 8; // 8 hours
+const ALLOWED_ROLES: readonly string[] = Object.values(ROLES);
 
 function secret(): string {
   const fromEnv = process.env.SESSION_SECRET;
@@ -65,7 +67,7 @@ function decode(token: string): SessionUser | null {
       typeof parsed?.id !== "number" ||
       typeof parsed?.email !== "string" ||
       typeof parsed?.fullName !== "string" ||
-      !["Member", "Coach", "Admin"].includes(parsed?.role)
+      !ALLOWED_ROLES.includes(parsed?.role)
     ) {
       return null;
     }

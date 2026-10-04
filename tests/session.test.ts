@@ -88,6 +88,18 @@ async function main() {
     assert.equal(await getSession(), null);
   });
 
+  await check("a Fighter session round-trips", async () => {
+    const fighter: SessionUser = {
+      id: 9,
+      email: "fighter@pfc.co.za",
+      fullName: "Demo Fighter",
+      role: "Fighter",
+    };
+    await createSession(fighter);
+    assert.deepEqual(await getSession(), fighter);
+    assert.equal(await hasRole("Member", "Fighter"), true);
+  });
+
   await check("destroySession clears it", async () => {
     await createSession(admin);
     assert.ok(await getSession());

@@ -1,20 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect } from "react";
 
+// The server has already logged the real error. In production the browser is
+// only handed a digest, so there is nothing useful to report from here.
 export default function Error({
-  error,
   reset,
 }: {
   error: Error & { digest?: string };
   reset: () => void;
 }) {
-  useEffect(() => {
-    // Part 2: send this to a logging service rather than the console.
-    console.error(error);
-  }, [error]);
-
   return (
     <section className="auth">
       <div style={{ textAlign: "center", maxWidth: 460 }}>

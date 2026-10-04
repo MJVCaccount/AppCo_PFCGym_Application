@@ -3,9 +3,8 @@
  * key (email, slug, day, coach + day + time) or a fixed id, so a second run
  * updates in place and never duplicates.
  *
- * The literals are copied from src/lib/gym-data.ts and src/lib/users.ts rather
- * than imported, because those modules are "server-only" and cannot load
- * outside the Next runtime.
+ * This file is the source of the demo content: the catalogue, the demo
+ * accounts and the timetable with its booked counts.
  *
  * Run with: npx prisma db seed
  */

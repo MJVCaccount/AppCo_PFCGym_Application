@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
-import type { SessionUser } from "@/lib/types";
+import { isMemberRole, type SessionUser } from "@/lib/types";
 
 const NAV = [
   { href: "/", label: "Home" },
@@ -28,6 +28,8 @@ export default function SiteNav({ session, todayHours, logoutAction }: Props) {
   const panelRef = useRef<HTMLDivElement>(null);
   const burgerRef = useRef<HTMLButtonElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
+
+  const canBook = session !== null && isMemberRole(session.role);
 
   const isCurrent = (href: string) =>
     href === "/" ? pathname === "/" : pathname.startsWith(href);
@@ -105,6 +107,11 @@ export default function SiteNav({ session, todayHours, logoutAction }: Props) {
           <div className="header__actions">
             {session ? (
               <>
+                {canBook && (
+                  <Link className="header__login" href="/bookings">
+                    My bookings
+                  </Link>
+                )}
                 <Link className="header__login" href="/dashboard">
                   {session.fullName}
                 </Link>
@@ -184,6 +191,11 @@ export default function SiteNav({ session, todayHours, logoutAction }: Props) {
               <Link className="btn btn--red" href="/dashboard">
                 My dashboard
               </Link>
+              {canBook && (
+                <Link className="btn btn--line" href="/bookings">
+                  My bookings
+                </Link>
+              )}
               <form action={logoutAction}>
                 <button className="btn btn--line btn--block" type="submit">
                   Sign out

@@ -3,14 +3,16 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 
-import { createSession, destroySession, getSession } from "@/lib/session";
+import { ERROR_CODES, mapPrismaError } from "@/lib/errors";
+import { getPlan } from "@/lib/repositories/plansRepository";
 import {
-  createUser,
+  createMember,
   findByEmail,
   toSessionUser,
   validateCredentials,
-} from "@/lib/users";
-import { getPlan } from "@/lib/gym-data";
+} from "@/lib/repositories/usersRepository";
+import { createSession, destroySession, getSession } from "@/lib/session";
+import type { UserAccount } from "@/lib/types";
 import {
   type FormState,
   validate,
@@ -28,10 +30,15 @@ export async function login(
     return { ok: false, errors, values };
   }
 
-  const user = validateCredentials(
-    String(data.get("email")),
-    String(data.get("password")),
-  );
+  let user: UserAccount | null;
+  try {
+    user = await validateCredentials(
+      String(data.get("email")),
+      String(data.get("password")),
+    );
+  } catch (e) {
+    return { ok: false, message: mapPrismaError(e).message, values };
+  }
 
   if (!user) {
     // Deliberately vague. Saying which of the two was wrong tells an attacker
@@ -74,32 +81,43 @@ export async function register(
   }
 
   const email = String(data.get("email"));
+  const emailTaken: FormState = {
+    ok: false,
+    errors: { email: "That email is already registered." },
+    values,
+  };
 
-  if (findByEmail(email)) {
-    return {
-      ok: false,
-      errors: { email: "That email is already registered." },
-      values,
-    };
+  let user: UserAccount;
+  try {
+    if (await findByEmail(email)) return emailTaken;
+
+    const rawPlan = String(data.get("planId") ?? "");
+    const planId = rawPlan ? Number(rawPlan) : null;
+
+    if (planId !== null && !(await getPlan(planId))) {
+      return {
+        ok: false,
+        errors: { planId: "Choose one of the listed plans." },
+        values,
+      };
+    }
+
+    user = await createMember({
+      email,
+      fullName: String(data.get("fullName")),
+      phone: String(data.get("phone") ?? ""),
+      password: String(data.get("password")),
+      planId,
+    });
+  } catch (e) {
+    const error = mapPrismaError(e);
+
+    // Two sign-ups with the same address can both pass the check above. The
+    // unique index stops the second one, and it gets the same field error.
+    if (error.code === ERROR_CODES.conflict) return emailTaken;
+
+    return { ok: false, message: error.message, values };
   }
-
-  const rawPlan = String(data.get("planId") ?? "");
-  const planId = rawPlan ? Number(rawPlan) : null;
-
-  if (planId !== null && !getPlan(planId)) {
-    return {
-      ok: false,
-      errors: { planId: "Choose one of the listed plans." },
-      values,
-    };
-  }
-
-  const user = createUser({
-    email,
-    fullName: String(data.get("fullName")),
-    password: String(data.get("password")),
-    planId,
-  });
 
   await createSession(toSessionUser(user));
   revalidatePath("/", "layout");

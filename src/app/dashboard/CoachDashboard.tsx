@@ -1,19 +1,21 @@
 import Link from "next/link";
 
 import { logout } from "@/actions/auth";
-import { getSlotsForCoach } from "@/lib/gym-data";
-import {
-  DAY_NAMES,
-  initials,
-  isFull,
-  spacesLeft,
-  todayKey,
-} from "@/lib/types";
+import { currentDayAndHour } from "@/lib/dates";
+import { getSlotsForCoach } from "@/lib/repositories/timetableRepository";
+import { DAY_NAMES, initials, isFull, spacesLeft } from "@/lib/types";
 import type { SessionUser } from "@/lib/types";
 
-export default function CoachDashboard({ session }: { session: SessionUser }) {
-  const week = getSlotsForCoach(session.fullName);
-  const today = week.filter((slot) => slot.day === todayKey());
+export default async function CoachDashboard({
+  session,
+}: {
+  session: SessionUser;
+}) {
+  const now = new Date();
+  // A coach's user id is their coach id.
+  const week = await getSlotsForCoach(session.id, now);
+  const todayDay = currentDayAndHour(now).day;
+  const today = week.filter((slot) => slot.day === todayDay);
   const totalBooked = week.reduce((sum, slot) => sum + slot.booked, 0);
 
   return (

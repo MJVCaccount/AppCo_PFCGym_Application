@@ -48,6 +48,35 @@ function gymMoment(now: Date): GymMoment {
   };
 }
 
+/** The gym-local weekday and hour (0–23) at `now`. */
+export function currentDayAndHour(now: Date): { day: DayKey; hour: number } {
+  const current = gymMoment(now);
+  return { day: current.day, hour: Number(current.time.slice(0, 2)) };
+}
+
+/** "YYYY-MM-DD" for a date-only value (UTC midnight, as a DATE column reads). */
+export function isoDate(date: Date): string {
+  return date.toISOString().slice(0, 10);
+}
+
+/**
+ * Whether a dated session has started, on the gym's clock. `sessionDate` is a
+ * date-only value as nextOccurrence returns it. A class starting this very
+ * minute counts as started, matching nextOccurrence.
+ */
+export function hasSessionStarted(
+  sessionDate: Date,
+  startsAt: string,
+  now: Date,
+): boolean {
+  const current = gymMoment(now);
+  const today = current.date.getTime();
+  const session = sessionDate.getTime();
+
+  if (session !== today) return session < today;
+  return current.time >= startsAt;
+}
+
 /**
  * The date of the next session of a weekly class, as a date-only Date (UTC
  * midnight of the gym-local calendar day, which is what a Postgres DATE column

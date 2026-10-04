@@ -3,10 +3,13 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
-import { getPlan } from "@/lib/gym-data";
+import { logger } from "@/lib/logger";
 import { getSession } from "@/lib/session";
-import { createBooking } from "@/lib/services/bookingService";
-import { setPlan } from "@/lib/users";
+import { cancelBooking, createBooking } from "@/lib/services/bookingService";
+import {
+  cancelMembership as cancelPlan,
+  changePlan as switchPlan,
+} from "@/lib/services/membershipService";
 import {
   type FormState,
   validate,
@@ -23,7 +26,7 @@ export async function book(data: FormData): Promise<void> {
     redirect(`/login?returnUrl=${encodeURIComponent(`/timetable?day=${day}`)}`);
   }
 
-  const result = createBooking(session, id);
+  const result = await createBooking(session, id);
 
   revalidatePath("/timetable");
   revalidatePath("/dashboard");
@@ -40,24 +43,46 @@ export async function book(data: FormData): Promise<void> {
   redirect(`/timetable?day=${day}&booked=${encodeURIComponent(confirmation)}`);
 }
 
+/** Cancel one of the signed-in member's bookings. */
+export async function cancelBookingAction(data: FormData): Promise<void> {
+  const session = await getSession();
+  if (!session) redirect("/login?returnUrl=%2Fbookings");
+
+  const result = await cancelBooking(session, Number(data.get("bookingId")));
+
+  revalidatePath("/bookings");
+  revalidatePath("/timetable");
+  revalidatePath("/dashboard");
+
+  if (!result.ok) {
+    const message = result.error ?? "That booking could not be cancelled.";
+    redirect(`/bookings?error=${encodeURIComponent(message)}`);
+  }
+
+  const confirmation = result.booking
+    ? `Cancelled ${result.booking.className} at ${result.booking.startsAt}.`
+    : "Booking cancelled.";
+
+  redirect(`/bookings?notice=${encodeURIComponent(confirmation)}`);
+}
+
 /** Move the signed-in member onto a different plan. */
 export async function changePlan(data: FormData): Promise<void> {
   const session = await getSession();
   if (!session) redirect("/login?returnUrl=%2Fmemberships");
 
-  const planId = Number(data.get("planId"));
-  const plan = getPlan(planId);
+  const result = await switchPlan(session, Number(data.get("planId")));
 
-  if (!plan) {
-    redirect("/memberships?error=That+plan+could+not+be+found.");
+  if (!result.ok || !result.plan) {
+    const message = result.error ?? "That plan could not be found.";
+    redirect(`/memberships?error=${encodeURIComponent(message)}`);
   }
 
-  setPlan(session.id, planId);
   revalidatePath("/", "layout");
 
   redirect(
     `/dashboard?notice=${encodeURIComponent(
-      `You are now on the R${plan.pricePerMonth} plan.`,
+      `You are now on the R${result.plan.pricePerMonth} plan.`,
     )}`,
   );
 }
@@ -67,7 +92,13 @@ export async function cancelMembership(): Promise<void> {
   const session = await getSession();
   if (!session) redirect("/login?returnUrl=%2Fdashboard");
 
-  setPlan(session.id, null);
+  const result = await cancelPlan(session);
+
+  if (!result.ok) {
+    const message = result.error ?? "Your membership could not be cancelled.";
+    redirect(`/memberships?error=${encodeURIComponent(message)}`);
+  }
+
   revalidatePath("/", "layout");
 
   redirect(
@@ -104,7 +135,7 @@ export async function sendEnquiry(
     };
   }
 
-  console.info("[contact] enquiry from %s", values.email);
+  logger.info("Contact enquiry received");
 
   return {
     ok: true,

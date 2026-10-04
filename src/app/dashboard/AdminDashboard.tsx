@@ -1,14 +1,25 @@
 import Link from "next/link";
 
 import { logout } from "@/actions/auth";
-import { getClasses, getTimetable } from "@/lib/gym-data";
+import { getClasses } from "@/lib/repositories/programmesRepository";
+import { getTimetable } from "@/lib/repositories/timetableRepository";
+import { countByRole, getAll } from "@/lib/repositories/usersRepository";
 import { initials, isFull } from "@/lib/types";
 import type { SessionUser } from "@/lib/types";
-import { countByRole, getAll } from "@/lib/users";
 
-export default function AdminDashboard({ session }: { session: SessionUser }) {
-  const timetable = getTimetable();
-  const users = getAll();
+export default async function AdminDashboard({
+  session,
+}: {
+  session: SessionUser;
+}) {
+  const [timetable, users, classes, memberCount, coachCount] =
+    await Promise.all([
+      getTimetable(),
+      getAll(),
+      getClasses(),
+      countByRole("Member"),
+      countByRole("Coach"),
+    ]);
 
   return (
     <div className="dash">
@@ -47,15 +58,15 @@ export default function AdminDashboard({ session }: { session: SessionUser }) {
 
           <div className="stats" style={{ marginBottom: 40 }}>
             <div>
-              <b>{countByRole("Member")}</b>
+              <b>{memberCount}</b>
               <span>Members</span>
             </div>
             <div>
-              <b>{countByRole("Coach")}</b>
+              <b>{coachCount}</b>
               <span>Coaches</span>
             </div>
             <div>
-              <b>{getClasses().length}</b>
+              <b>{classes.length}</b>
               <span>Classes</span>
             </div>
             <div>

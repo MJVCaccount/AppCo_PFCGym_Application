@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import { getOpeningHours } from "@/lib/gym-data";
+import { getOpeningHours } from "@/lib/repositories/hoursRepository";
 import { DAY_NAMES, formatHours } from "@/lib/types";
 
 const NAV = [
@@ -12,8 +12,8 @@ const NAV = [
   { href: "/contact", label: "Contact" },
 ];
 
-export default function Footer() {
-  const hours = getOpeningHours();
+export default async function Footer() {
+  const hours = await getOpeningHours();
 
   return (
     <footer className="footer">

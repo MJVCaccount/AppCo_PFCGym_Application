@@ -2,19 +2,25 @@ import Link from "next/link";
 
 import { logout } from "@/actions/auth";
 import { cancelMembership } from "@/actions/gym";
-import { getNextAvailableSlot, getPlan } from "@/lib/gym-data";
+import { getPlan } from "@/lib/repositories/plansRepository";
+import { getNextAvailableSlot } from "@/lib/repositories/timetableRepository";
+import { findById } from "@/lib/repositories/usersRepository";
 import { DAY_NAMES, formatPrice, initials } from "@/lib/types";
 import type { SessionUser } from "@/lib/types";
-import { findById } from "@/lib/users";
 
-export default function MemberDashboard({
+export default async function MemberDashboard({
   session,
 }: {
   session: SessionUser;
 }) {
-  const user = findById(session.id);
-  const plan = user?.planId != null ? getPlan(user.planId) : undefined;
-  const next = getNextAvailableSlot();
+  const [user, next] = await Promise.all([
+    findById(session.id),
+    getNextAvailableSlot(),
+  ]);
+  const plan =
+    user?.planId != null
+      ? await getPlan(user.planId, { includeInactive: true })
+      : undefined;
 
   const nextPayment = new Date();
   nextPayment.setMonth(nextPayment.getMonth() + 1, 1);
@@ -113,6 +119,13 @@ export default function MemberDashboard({
                   style={{ marginTop: 16 }}
                 >
                   View timetable
+                </Link>
+                <Link
+                  className="btn btn--grey btn--block btn--sm"
+                  href="/bookings"
+                  style={{ marginTop: 10 }}
+                >
+                  My bookings
                 </Link>
               </article>
 
