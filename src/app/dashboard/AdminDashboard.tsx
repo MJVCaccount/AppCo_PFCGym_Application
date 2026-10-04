@@ -111,7 +111,8 @@ export default async function AdminDashboard({
           <div className="section-head">
             <h2>Users</h2>
             <p className="lead">
-              Editing accounts arrives with the Part 2 back end.
+              Manage classes, coaches, members, fighters, events and plans from
+              the <Link href="/admin/classes">admin section</Link>.
             </p>
           </div>
 

@@ -3,6 +3,7 @@ import "server-only";
 import {
   demote,
   getFighter,
+  listAdminFighters,
   promote,
 } from "@/lib/repositories/fightersRepository";
 import { listForFighter } from "@/lib/repositories/participationsRepository";
@@ -15,6 +16,7 @@ import {
   succeed,
 } from "@/lib/services/serviceResult";
 import {
+  type AdminFighter,
   type BoutOffer,
   type Fighter,
   type FighterOffers,
@@ -34,6 +36,19 @@ import { RULES } from "@/lib/validation";
 
 const NOT_FOUND_MEMBER = "That member could not be found.";
 const NOT_FOUND_FIGHTER = "That fighter could not be found.";
+
+/** Every fighter, with whether each can be demoted. Admin only. */
+export async function listFightersForAdmin(
+  session: SessionUser,
+): Promise<ServiceResult<AdminFighter[]>> {
+  if (!isAdmin(session)) return fail(403, ADMIN_ONLY);
+
+  try {
+    return succeed(await listAdminFighters());
+  } catch (e) {
+    return failure(e);
+  }
+}
 
 export async function promoteToFighter(
   session: SessionUser,

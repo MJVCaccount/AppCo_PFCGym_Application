@@ -54,9 +54,90 @@ export function currentDayAndHour(now: Date): { day: DayKey; hour: number } {
   return { day: current.day, hour: Number(current.time.slice(0, 2)) };
 }
 
+/**
+ * The gym-local calendar date (as UTC midnight, which is how a DATE column
+ * reads) and the 24-hour "HH:mm" time at `now`.
+ */
+export function gymDateAndTime(now: Date): { date: Date; time: string } {
+  const current = gymMoment(now);
+  return { date: current.date, time: current.time };
+}
+
+/** UTC midnight of the first day of the gym-local month `now` falls in. */
+export function startOfGymMonth(now: Date): Date {
+  const { date } = gymMoment(now);
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1));
+}
+
 /** "YYYY-MM-DD" for a date-only value (UTC midnight, as a DATE column reads). */
 export function isoDate(date: Date): string {
   return date.toISOString().slice(0, 10);
+}
+
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * A "YYYY-MM-DD" string as a date-only Date (UTC midnight), or null when it is
+ * not text, not in that shape, or not a real calendar day (2026-02-30).
+ */
+export function parseIsoDate(value: unknown): Date | null {
+  if (typeof value !== "string" || !ISO_DATE.test(value)) return null;
+
+  const date = new Date(`${value}T00:00:00.000Z`);
+  if (Number.isNaN(date.getTime()) || isoDate(date) !== value) return null;
+
+  return date;
+}
+
+/** A date-only value moved by a number of days. */
+export function addDays(date: Date, days: number): Date {
+  return new Date(date.getTime() + days * MS_PER_DAY);
+}
+
+const dateOnlyClock = new Intl.DateTimeFormat("en-GB", {
+  timeZone: "UTC",
+  weekday: "short",
+  year: "numeric",
+  month: "short",
+  day: "numeric",
+});
+
+/** "Mon 5 Oct 2026" from an ISO date, or an empty string if unreadable. */
+export function formatSessionDate(value: string): string {
+  const date = parseIsoDate(value);
+  if (!date) return "";
+
+  const parts: Record<string, string> = {};
+  for (const part of dateOnlyClock.formatToParts(date)) {
+    parts[part.type] = part.value;
+  }
+
+  return `${parts.weekday} ${parts.day} ${parts.month} ${parts.year}`;
+}
+
+// South Africa has no daylight saving, so the gym's offset never changes.
+const GYM_UTC_OFFSET = "+02:00";
+const GYM_OFFSET_MS = 2 * 60 * 60 * 1000;
+const LOCAL_DATE_TIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/;
+
+/**
+ * The value of a datetime-local input, read as gym time, as an ISO string
+ * with the gym's offset: "2026-11-28T19:00" -> "2026-11-28T19:00:00+02:00".
+ * Anything in another shape is returned unchanged for the service to reject.
+ */
+export function gymLocalToIso(value: string): string {
+  const trimmed = value.trim();
+  return LOCAL_DATE_TIME.test(trimmed)
+    ? `${trimmed}:00${GYM_UTC_OFFSET}`
+    : trimmed;
+}
+
+/** The reverse: a stored instant as a datetime-local value on the gym's clock. */
+export function isoToGymLocal(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+
+  return new Date(date.getTime() + GYM_OFFSET_MS).toISOString().slice(0, 16);
 }
 
 const eventClock = new Intl.DateTimeFormat("en-GB", {
@@ -86,6 +167,19 @@ export function formatEventDate(value: string | Date): string {
   }
 
   return `${parts.weekday} ${parts.day} ${parts.month} ${parts.year}, ${parts.hour}:${parts.minute}`;
+}
+
+/** "3 Oct 2026" on the gym's clock, from a stored UTC instant. */
+export function formatGymDate(value: string | Date): string {
+  const date = typeof value === "string" ? new Date(value) : value;
+  if (Number.isNaN(date.getTime())) return "";
+
+  const parts: Record<string, string> = {};
+  for (const part of eventClock.formatToParts(date)) {
+    parts[part.type] = part.value;
+  }
+
+  return `${parts.day} ${parts.month} ${parts.year}`;
 }
 
 /**

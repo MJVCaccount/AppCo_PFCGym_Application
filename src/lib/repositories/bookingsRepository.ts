@@ -2,7 +2,12 @@ import "server-only";
 
 import type { Prisma } from "@prisma/client";
 
-import { hasSessionStarted, isoDate, nextOccurrence } from "@/lib/dates";
+import {
+  gymDateAndTime,
+  hasSessionStarted,
+  isoDate,
+  nextOccurrence,
+} from "@/lib/dates";
 import { prisma } from "@/lib/prisma";
 import type { Booking, DayKey } from "@/lib/types";
 
@@ -41,6 +46,41 @@ function toBooking(row: BookingRow): Booking {
     sessionDate: isoDate(row.sessionDate),
     status: row.status,
   };
+}
+
+/**
+ * Confirmed bookings for sessions that have not started on the gym's clock:
+ * a later date, or today with a later start time. The mirror image of
+ * hasSessionStarted.
+ */
+export function futureConfirmedWhere(now: Date): Prisma.BookingWhereInput {
+  const { date, time } = gymDateAndTime(now);
+
+  return {
+    status: "Confirmed",
+    OR: [
+      { sessionDate: { gt: date } },
+      { sessionDate: date, gymClass: { startsAt: { gt: time } } },
+    ],
+  };
+}
+
+/**
+ * Cancels every future Confirmed booking of one member or one class and
+ * returns how many there were. Always called inside the transaction that
+ * makes them impossible to honour (a deactivated account or class).
+ */
+export async function cancelFutureConfirmed(
+  tx: Prisma.TransactionClient,
+  scope: { memberId: number } | { gymClassId: number },
+  now: Date,
+): Promise<number> {
+  const { count } = await tx.booking.updateMany({
+    where: { ...scope, ...futureConfirmedWhere(now) },
+    data: { status: "Cancelled", cancelledAt: now },
+  });
+
+  return count;
 }
 
 interface LockedClass {

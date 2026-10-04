@@ -3,6 +3,7 @@ import "server-only";
 import type { Prisma } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
+import type { AuditLogRow } from "@/lib/types";
 
 /**
  * Data-access layer for the audit trail: who did what to which row.
@@ -33,6 +34,31 @@ function safeDetail(detail: AuditDetail | undefined): AuditDetail | undefined {
   }
 
   return Object.keys(clean).length > 0 ? clean : undefined;
+}
+
+/** The most recent audit rows, newest first, with the actor's name. */
+export async function listLatest(limit = 100): Promise<AuditLogRow[]> {
+  const rows = await prisma.auditLog.findMany({
+    orderBy: { id: "desc" },
+    take: limit,
+    select: {
+      id: true,
+      createdAt: true,
+      action: true,
+      entity: true,
+      entityId: true,
+      actor: { select: { fullName: true } },
+    },
+  });
+
+  return rows.map((row) => ({
+    id: row.id,
+    createdAt: row.createdAt.toISOString(),
+    actorName: row.actor?.fullName ?? null,
+    action: row.action,
+    entity: row.entity,
+    entityId: row.entityId,
+  }));
 }
 
 /**

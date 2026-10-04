@@ -4,8 +4,16 @@ import { Prisma } from "@prisma/client";
 
 import { hashPassword, verifyPassword } from "@/lib/password";
 import { prisma } from "@/lib/prisma";
+import { record as audit } from "@/lib/repositories/auditRepository";
+import { cancelFutureConfirmed } from "@/lib/repositories/bookingsRepository";
 import { optionalText } from "@/lib/text";
-import type { Role, SessionUser, UserAccount } from "@/lib/types";
+import type {
+  MemberListItem,
+  MemberOption,
+  Role,
+  SessionUser,
+  UserAccount,
+} from "@/lib/types";
 
 /**
  * Data-access layer for accounts (Task 1 §7.1.2).
@@ -14,6 +22,9 @@ import type { Role, SessionUser, UserAccount } from "@/lib/types";
  * "Member@PFC.co.za" and "member@pfc.co.za" are the same account. The password
  * hash and salt are read only inside validateCredentials and never returned.
  */
+
+const TRANSACTION_OPTIONS = { timeout: 10_000, maxWait: 10_000 };
+const MAX_OPTIONS = 200;
 
 const accountSelect = {
   id: true,
@@ -96,6 +107,89 @@ export async function countByRole(role: Role): Promise<number> {
   return prisma.user.count({ where: { role } });
 }
 
+/** What a session needs to know about its account on every request. */
+export interface SessionState {
+  email: string;
+  fullName: string;
+  role: Role;
+  isActive: boolean;
+}
+
+export async function getSessionState(
+  id: number,
+): Promise<SessionState | undefined> {
+  if (!Number.isInteger(id) || id <= 0) return undefined;
+
+  const row = await prisma.user.findUnique({
+    where: { id },
+    select: { email: true, fullName: true, role: true, isActive: true },
+  });
+
+  return row ?? undefined;
+}
+
+const listSelect = {
+  id: true,
+  email: true,
+  fullName: true,
+  role: true,
+  isActive: true,
+  member: { select: { planId: true } },
+} satisfies Prisma.UserSelect;
+
+/**
+ * One page of accounts, by name, with the total that match. `search` matches
+ * part of a name or an email, whatever the letter case. Prisma sends it as a
+ * bound parameter, so it is only ever data.
+ */
+export async function listUsers(options: {
+  search: string | null;
+  page: number;
+  pageSize: number;
+}): Promise<{ items: MemberListItem[]; total: number }> {
+  const where: Prisma.UserWhereInput = options.search
+    ? {
+        OR: [
+          { fullName: { contains: options.search, mode: "insensitive" } },
+          { email: { contains: options.search, mode: "insensitive" } },
+        ],
+      }
+    : {};
+
+  const [total, rows] = await prisma.$transaction([
+    prisma.user.count({ where }),
+    prisma.user.findMany({
+      where,
+      orderBy: [{ fullName: "asc" }, { id: "asc" }],
+      skip: (options.page - 1) * options.pageSize,
+      take: options.pageSize,
+      select: listSelect,
+    }),
+  ]);
+
+  return {
+    total,
+    items: rows.map((row) => ({
+      id: row.id,
+      email: row.email,
+      fullName: row.fullName,
+      role: row.role,
+      isActive: row.isActive,
+      planId: row.member?.planId ?? null,
+    })),
+  };
+}
+
+/** Active members who are not fighters yet, for the promote dropdown. */
+export async function listPromotable(): Promise<MemberOption[]> {
+  return prisma.user.findMany({
+    where: { role: "Member", isActive: true, member: { isNot: null } },
+    orderBy: [{ fullName: "asc" }, { id: "asc" }],
+    take: MAX_OPTIONS,
+    select: { id: true, fullName: true, email: true },
+  });
+}
+
 // ---------------------------------------------------------------- auth
 
 /**
@@ -167,20 +261,24 @@ export type SetPlanResult = "ok" | "no-member" | "no-plan";
 /**
  * Sets or clears a member's plan and stamps planChangedAt.
  *
- * The check that the plan is still on sale and the update share a
- * transaction, so a plan retired in between cannot be taken up.
+ * The plan row is share-locked while the member is moved onto it, and
+ * retiring a plan locks the same row, so a plan retired in between cannot be
+ * taken up. Pass `actorId` when an admin makes the change for someone else:
+ * the audit record is then written in the same transaction.
  */
 export async function setPlan(
   userId: number,
   planId: number | null,
+  options: { actorId?: number; now?: Date } = {},
 ): Promise<SetPlanResult> {
+  const now = options.now ?? new Date();
+
   try {
     return await prisma.$transaction(async (tx) => {
       if (planId !== null) {
-        const plan = await tx.membershipPlan.findFirst({
-          where: { id: planId, isActive: true },
-          select: { id: true },
-        });
+        const [plan] = await tx.$queryRaw<{ id: number }[]>`
+          SELECT "id" FROM "MembershipPlan"
+          WHERE "id" = ${planId} AND "isActive" = true FOR SHARE`;
         if (!plan) return "no-plan";
       }
 
@@ -188,17 +286,134 @@ export async function setPlan(
         where: { membershipId: userId },
         data: {
           planId,
-          planChangedAt: new Date(),
+          planChangedAt: now,
           ...(planId === null ? {} : { cancelledAt: null }),
         },
       });
 
+      if (options.actorId !== undefined) {
+        await audit(
+          {
+            actorId: options.actorId,
+            action: "member.setPlan",
+            entity: "Member",
+            entityId: userId,
+            detail: { planId },
+          },
+          tx,
+        );
+      }
+
       return "ok";
-    });
+    }, TRANSACTION_OPTIONS);
   } catch (e) {
     if (isNotFound(e)) return "no-member";
     throw e;
   }
+}
+
+interface LockedUser {
+  id: number;
+  role: Role;
+  isActive: boolean;
+}
+
+async function lockUser(
+  tx: Prisma.TransactionClient,
+  id: number,
+): Promise<LockedUser | undefined> {
+  const [row] = await tx.$queryRaw<LockedUser[]>`
+    SELECT "id", "role"::text AS "role", "isActive"
+    FROM "User" WHERE "id" = ${id} FOR UPDATE`;
+
+  return row;
+}
+
+export type DeactivateUserResult =
+  | { ok: true; cancelledBookings: number }
+  | {
+      ok: false;
+      reason: "not-found" | "already-inactive" | "last-admin" | "actor-inactive";
+    };
+
+/**
+ * Deactivates an account and cancels its future Confirmed bookings together.
+ *
+ * The first statement locks every active admin row, in id order. That is the
+ * queue all deactivations pass through: if the last two admins deactivate each
+ * other at the same moment, the second waits for the first to commit, then
+ * reads the admin list again, finds one admin left and is refused. The same
+ * lock means the caller is checked too: an admin deactivated a moment ago
+ * cannot go on to deactivate someone else.
+ */
+export async function deactivateUser(
+  targetId: number,
+  actorId: number,
+  now: Date = new Date(),
+): Promise<DeactivateUserResult> {
+  return prisma.$transaction(async (tx): Promise<DeactivateUserResult> => {
+    const admins = await tx.$queryRaw<{ id: number }[]>`
+      SELECT "id" FROM "User"
+      WHERE "role" = 'Admin' AND "isActive" = true
+      ORDER BY "id" FOR UPDATE`;
+
+    const target = await lockUser(tx, targetId);
+    if (!target) return { ok: false, reason: "not-found" };
+    if (!target.isActive) return { ok: false, reason: "already-inactive" };
+    if (target.role === "Admin" && admins.length <= 1) {
+      return { ok: false, reason: "last-admin" };
+    }
+    if (!admins.some((admin) => admin.id === actorId)) {
+      return { ok: false, reason: "actor-inactive" };
+    }
+
+    await tx.user.update({ where: { id: targetId }, data: { isActive: false } });
+    const cancelledBookings = await cancelFutureConfirmed(
+      tx,
+      { memberId: targetId },
+      now,
+    );
+    await audit(
+      {
+        actorId,
+        action: "user.deactivate",
+        entity: "User",
+        entityId: targetId,
+        detail: { cancelledBookings },
+      },
+      tx,
+    );
+
+    return { ok: true, cancelledBookings };
+  }, TRANSACTION_OPTIONS);
+}
+
+export type ReactivateUserResult =
+  | { ok: true }
+  | { ok: false; reason: "not-found" | "already-active" };
+
+export async function reactivateUser(
+  targetId: number,
+  actorId: number,
+): Promise<ReactivateUserResult> {
+  return prisma.$transaction(async (tx): Promise<ReactivateUserResult> => {
+    const target = await lockUser(tx, targetId);
+    if (!target) return { ok: false, reason: "not-found" };
+    if (target.isActive) return { ok: false, reason: "already-active" };
+
+    await tx.user.update({ where: { id: targetId }, data: { isActive: true } });
+    await audit(
+      {
+        actorId,
+        action: "user.reactivate",
+        entity: "User",
+        entityId: targetId,
+      },
+      tx,
+    );
+
+    return { ok: true };
+  }, TRANSACTION_OPTIONS);
 }
 
 /** Clears the plan and records when. Returns false if there is no member. */

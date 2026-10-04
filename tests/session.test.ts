@@ -1,5 +1,13 @@
+/**
+ * Session tests, run against the seeded test database (see
+ * tests/helpers/db.ts). getSession() checks the account's current role and
+ * isActive flag in the database on every call, so these tests seed first and
+ * use real account ids rather than made-up ones.
+ */
 import assert from "node:assert/strict";
 import { cookies } from "next/headers";
+
+import { resetDatabase, testDb } from "./helpers/db";
 
 import {
   createSession,
@@ -17,21 +25,24 @@ async function check(label: string, fn: () => Promise<void> | void) {
   console.log("  ok  " + label);
 }
 
-const admin: SessionUser = {
-  id: 4,
-  email: "admin@pfc.co.za",
-  fullName: "Ruan Cupido",
-  role: "Admin",
-};
+async function sessionFor(email: string): Promise<SessionUser> {
+  const row = await testDb.user.findUniqueOrThrow({ where: { email } });
+  return { id: row.id, email: row.email, fullName: row.fullName, role: row.role };
+}
 
 async function main() {
+  await resetDatabase();
+
+  const admin = await sessionFor("admin@pfc.co.za");
+  const fighter = await sessionFor("fighter@pfc.co.za");
+
   console.log("\nSESSION");
 
   await check("no session before signing in", async () =>
     assert.equal(await getSession(), null),
   );
 
-  await check("round-trips the user", async () => {
+  await check("round-trips the user, reading the live role from the database", async () => {
     await createSession(admin);
     assert.deepEqual(await getSession(), admin);
     assert.equal(await isSignedIn(), true);
@@ -55,7 +66,7 @@ async function main() {
 
     // Promote ourselves to Admin... on a Member payload, keeping the old signature
     const forged = Buffer.from(
-      JSON.stringify({ ...admin, role: "Admin", id: 1 }),
+      JSON.stringify({ ...admin, role: "Admin", id: fighter.id }),
     ).toString("base64url");
 
     store.set("pfc_session", `${forged}.${signature}`);
@@ -89,12 +100,6 @@ async function main() {
   });
 
   await check("a Fighter session round-trips", async () => {
-    const fighter: SessionUser = {
-      id: 9,
-      email: "fighter@pfc.co.za",
-      fullName: "Demo Fighter",
-      role: "Fighter",
-    };
     await createSession(fighter);
     assert.deepEqual(await getSession(), fighter);
     assert.equal(await hasRole("Member", "Fighter"), true);
@@ -108,8 +113,62 @@ async function main() {
     assert.equal(await isSignedIn(), false);
   });
 
-  console.log(`\n${passed} checks passed\n`);
+  console.log("\nLIVE ROLE AND ACTIVE STATE");
 
+  await check(
+    "a cookie's stale role is ignored: the database's current role wins",
+    async () => {
+      // The cookie claims Member; the account is really a Fighter.
+      await createSession({ ...fighter, role: "Member" });
+      const session = await getSession();
+      assert.equal(session?.role, "Fighter");
+    },
+  );
+
+  await check("a deactivated account's session stops working", async () => {
+    await createSession(fighter);
+    assert.ok(await getSession());
+
+    await testDb.user.update({
+      where: { id: fighter.id },
+      data: { isActive: false },
+    });
+    assert.equal(await getSession(), null);
+
+    await testDb.user.update({
+      where: { id: fighter.id },
+      data: { isActive: true },
+    });
+    assert.deepEqual(await getSession(), fighter);
+  });
+
+  await check("a deleted account's cookie is rejected, not thrown on", async () => {
+    const ghost = await testDb.user.create({
+      data: {
+        email: "ghost@example.co.za",
+        fullName: "Ghost Account",
+        role: "Member",
+        passwordHash: "x",
+        passwordSalt: "y",
+      },
+    });
+    await createSession({
+      id: ghost.id,
+      email: ghost.email,
+      fullName: ghost.fullName,
+      role: ghost.role,
+    });
+    await testDb.user.delete({ where: { id: ghost.id } });
+    assert.equal(await getSession(), null);
+  });
+
+  console.log(`\n${passed} checks passed\n`);
 }
 
-main();
+main()
+  .then(() => testDb.$disconnect())
+  .then(() => process.exit(0))
+  .catch((error) => {
+    console.error(error);
+    process.exit(1);
+  });

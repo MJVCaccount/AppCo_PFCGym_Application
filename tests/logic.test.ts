@@ -718,6 +718,52 @@ async function main() {
     }
   });
 
+  await check("text(min, max) checks the trimmed length and refuses non-text", () => {
+    const rule = RULES.text(2, 80, "Class name");
+    assert.equal(rule("ab"), null);
+    assert.equal(rule(`  ${"x".repeat(80)}  `), null);
+    assert.equal(rule("x"), "Class name must be 2 to 80 characters.");
+    assert.ok(rule("x".repeat(81)));
+    assert.ok(rule("   "));
+    for (const notText of [null, undefined, 42, ["ab"], { length: 5 }]) {
+      assert.ok(rule(notText), String(notText));
+    }
+  });
+
+  await check("integerRange(min, max) accepts whole numbers in range only", () => {
+    const rule = RULES.integerRange(1, 200, "Capacity");
+    assert.equal(rule(1), null);
+    assert.equal(rule(200), null);
+    assert.equal(rule(0), "Capacity must be a whole number from 1 to 200.");
+    for (const bad of [201, -5, 1.5, NaN, Infinity, 2 ** 53, "12", null, [12]]) {
+      assert.ok(rule(bad), String(bad));
+    }
+  });
+
+  await check("timeOfDay accepts 00:00 to 23:59 as HH:mm", () => {
+    for (const time of ["00:00", "06:30", "19:05", "23:59"]) {
+      assert.equal(RULES.timeOfDay(time), null, time);
+    }
+    for (const time of ["24:00", "23:60", "6:30", "06:3", "0630", " 06:30", "", "ab:cd"]) {
+      assert.ok(RULES.timeOfDay(time), time);
+    }
+  });
+
+  await check("url is optional and https only", () => {
+    assert.equal(RULES.url(""), null);
+    assert.equal(RULES.url("   "), null);
+    assert.equal(RULES.url("https://example.co.za/coach.jpg"), null);
+    for (const url of [
+      "http://example.co.za/coach.jpg",
+      "javascript:alert(1)",
+      "ftp://example.co.za",
+      "example.co.za",
+      `https://example.co.za/${"a".repeat(2048)}`,
+    ]) {
+      assert.ok(RULES.url(url), url.slice(0, 40));
+    }
+  });
+
   await check("validate() collects only the failing fields", () => {
     const data = new FormData();
     data.set("fullName", "R");

@@ -3,12 +3,15 @@ import "server-only";
 import {
   createEvent as insertEvent,
   type EventFields,
+  getEvent,
+  listAll,
   listUpcoming,
   setStatus,
   updateEvent as updateRow,
 } from "@/lib/repositories/eventsRepository";
 import {
   createOffer,
+  listForEvent,
   setAvailability,
   setResult,
 } from "@/lib/repositories/participationsRepository";
@@ -27,6 +30,7 @@ import {
   type BoutOffer,
   type BoutResult,
   type CompetitionEvent,
+  type EventDetail,
   ROLES,
   type ServiceResult,
   type SessionUser,
@@ -178,6 +182,42 @@ export async function listPublicEvents(
   now: Date = new Date(),
 ): Promise<CompetitionEvent[]> {
   return listUpcoming(now);
+}
+
+/** Every event whatever its status, newest first. Admin only. */
+export async function listAllEvents(
+  session: SessionUser,
+): Promise<ServiceResult<CompetitionEvent[]>> {
+  if (!isAdmin(session)) return fail(403, ADMIN_ONLY);
+
+  try {
+    return succeed(await listAll());
+  } catch (e) {
+    return failure(e);
+  }
+}
+
+/** One event with every offer made for it. Admin only. */
+export async function getEventDetail(
+  session: SessionUser,
+  eventId: unknown,
+): Promise<ServiceResult<EventDetail>> {
+  if (!isAdmin(session)) return fail(403, ADMIN_ONLY);
+
+  if (!isValidId(eventId)) {
+    return fail(400, "eventId must be a positive integer.");
+  }
+
+  try {
+    const [event, offers] = await Promise.all([
+      getEvent(eventId),
+      listForEvent(eventId),
+    ]);
+
+    return event ? succeed({ event, offers }) : fail(404, NOT_FOUND_EVENT);
+  } catch (e) {
+    return failure(e);
+  }
 }
 
 export async function createEvent(

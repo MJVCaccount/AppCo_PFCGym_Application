@@ -228,13 +228,159 @@ export interface FighterOffers {
 
 /**
  * What every fighter and event service function returns: `status` is the HTTP
- * status the result maps to, and `error` is safe to show to the user.
+ * status the result maps to, and `error` is safe to show to the user. `field`
+ * names the input the error is about, when there is one, so a form can show
+ * the message next to it.
  */
 export interface ServiceResult<T> {
   ok: boolean;
   status: number;
   error?: string;
+  field?: string;
   data?: T;
+}
+
+// ---------------------------------------------------------------- admin
+
+export const CLASS_KINDS: readonly ClassKind[] = [
+  "Group",
+  "Private",
+  "Kids",
+  "Fighters",
+];
+
+/** A scheduled class as the admin screens see it, active or not. */
+export interface AdminClass {
+  id: number;
+  name: string;
+  kind: ClassKind;
+  coachId: number;
+  coachName: string;
+  day: DayKey;
+  /** 24-hour "HH:mm". */
+  startsAt: string;
+  durationMinutes: number;
+  capacity: number;
+  programmeId: number | null;
+  isActive: boolean;
+  /** Confirmed bookings for the next session. */
+  booked: number;
+  /** Confirmed bookings for every session that has not started yet. */
+  futureBookings: number;
+  /** Whether any booking, of any status, was ever made for this class. */
+  hasBookings: boolean;
+}
+
+/** A catalogue programme as the admin screens see it, active or not. */
+export interface AdminProgramme extends GymClass {
+  isActive: boolean;
+}
+
+/** A coach as the admin screens see them, archived or not. */
+export interface AdminCoach {
+  id: number;
+  name: string;
+  email: string;
+  title: string;
+  bio: string;
+  imageUrl: string | null;
+  isActive: boolean;
+  /** Active classes this coach teaches. */
+  activeClasses: number;
+}
+
+export interface AdminPlan extends MembershipPlan {
+  isActive: boolean;
+  /** Active accounts currently on this plan. */
+  activeMembers: number;
+}
+
+/** One row of the admin account list. Never carries a password hash or salt. */
+export interface MemberListItem {
+  id: number;
+  fullName: string;
+  email: string;
+  role: Role;
+  isActive: boolean;
+  planId: number | null;
+}
+
+export interface MemberPage {
+  items: MemberListItem[];
+  total: number;
+  page: number;
+  pageSize: number;
+  pageCount: number;
+}
+
+/** A member who can be promoted, for a dropdown. */
+export interface MemberOption {
+  id: number;
+  fullName: string;
+  email: string;
+}
+
+export interface AdminFighter extends Fighter {
+  /** False while the fighter has bout offers or documents. */
+  canDemote: boolean;
+}
+
+export interface EventDetail {
+  event: CompetitionEvent;
+  offers: BoutOffer[];
+}
+
+export interface AuditLogRow {
+  id: number;
+  /** ISO-8601 UTC instant. */
+  createdAt: string;
+  actorName: string | null;
+  action: string;
+  entity: string;
+  entityId: number | null;
+}
+
+// ---------------------------------------------------------------- coach
+
+export type AttendanceStatus = "Completed" | "NoShow";
+
+/** One of a coach's classes, with the date its roster link should open. */
+export interface CoachClass extends TimetableSlot {
+  /** ISO date: today when the class runs today, otherwise its next session. */
+  rosterDate: string;
+}
+
+export interface RosterEntry {
+  bookingId: number;
+  memberName: string;
+  status: BookingStatus;
+}
+
+export interface Roster {
+  classId: number;
+  className: string;
+  coachName: string;
+  day: DayKey;
+  startsAt: string;
+  /** ISO date, "YYYY-MM-DD". */
+  sessionDate: string;
+  /** False for a date that is still to come on the gym's calendar. */
+  canMark: boolean;
+  entries: RosterEntry[];
+}
+
+export interface AttendanceStats {
+  attended: number;
+  noShow: number;
+  /** attended / (attended + noShow), or null when nothing is recorded. */
+  rate: number | null;
+}
+
+export interface MemberStats {
+  attendedThisMonth: number;
+  upcoming: number;
+  /** ISO-8601 UTC instant the current plan started, or null with no plan. */
+  planStartedAt: string | null;
 }
 
 // ---------------------------------------------------------------- helpers

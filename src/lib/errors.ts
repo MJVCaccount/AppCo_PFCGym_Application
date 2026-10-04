@@ -25,6 +25,7 @@ export const ERROR_CODES = {
   conflict: "CONFLICT",
   notFound: "NOT_FOUND",
   inUse: "IN_USE",
+  invalidInput: "INVALID_INPUT",
   internal: "INTERNAL",
 } as const;
 
@@ -50,7 +51,29 @@ export function mapPrismaError(e: unknown): AppError {
           ERROR_CODES.inUse,
           "That is in use and cannot be changed.",
         );
+      // A value the database cannot take: too long (P2000), or text Prisma
+      // could not encode, such as a lone surrogate half ("InvalidArg").
+      case "P2000":
+      case "InvalidArg":
+        return new AppError(
+          400,
+          ERROR_CODES.invalidInput,
+          "Text cannot contain null or other unreadable characters.",
+        );
     }
+  }
+
+  // Postgres text cannot hold a NUL character (22021). Prisma reports it as an
+  // unknown request error, so without this a pasted "\u0000" would be a 500.
+  if (
+    e instanceof Prisma.PrismaClientUnknownRequestError &&
+    /\b22021\b|invalid byte sequence/i.test(e.message)
+  ) {
+    return new AppError(
+      400,
+      ERROR_CODES.invalidInput,
+      "Text cannot contain null or other unreadable characters.",
+    );
   }
 
   logger.error("Unhandled data error", { error: e });

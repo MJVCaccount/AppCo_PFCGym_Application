@@ -22,6 +22,8 @@ export const EMPTY_FORM_STATE: FormState = { ok: false };
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const PHONE_PATTERN = /^[+\d][\d\s()-]{8,}$/;
+const TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/;
+const MAX_URL_LENGTH = 2048;
 
 function lengthBetween(value: string, min: number, max: number): boolean {
   const length = value.trim().length;
@@ -82,9 +84,60 @@ export const RULES = {
       ? null
       : "Description must be 10 to 2000 characters.";
   },
+
+  /**
+   * Builds a rule for text of `min` to `max` characters once trimmed. The
+   * value is `unknown` because it may come from JSON: anything that is not
+   * text (a number, an array) fails rather than being read as "".
+   */
+  text(min: number, max: number, label = "This field") {
+    return (value: unknown): string | null => {
+      if (typeof value === "string" && (value.includes("\u0000") || !value.isWellFormed())) {
+        return `${label} contains characters that cannot be saved.`;
+      }
+
+      return typeof value === "string" && lengthBetween(value, min, max)
+        ? null
+        : `${label} must be ${min} to ${max} characters.`;
+    };
+  },
+
+  /** Builds a rule for a whole number from `min` to `max` inclusive. */
+  integerRange(min: number, max: number, label = "This value") {
+    return (value: unknown): string | null =>
+      typeof value === "number" &&
+      Number.isInteger(value) &&
+      value >= min &&
+      value <= max
+        ? null
+        : `${label} must be a whole number from ${min} to ${max}.`;
+  },
+
+  /** 24-hour "HH:mm", 00:00 to 23:59. */
+  timeOfDay(value: string): string | null {
+    return TIME_PATTERN.test(value)
+      ? null
+      : "Enter a time as HH:mm, from 00:00 to 23:59.";
+  },
+
+  /** Optional: blank passes. Otherwise an https link. */
+  url(value: string): string | null {
+    const trimmed = value.trim();
+    if (trimmed === "") return null;
+
+    const message = "Enter an https:// link, or leave it blank.";
+    if (trimmed.length > MAX_URL_LENGTH) return message;
+
+    try {
+      return new URL(trimmed).protocol === "https:" ? null : message;
+    } catch {
+      return message;
+    }
+  },
 } as const;
 
-export type RuleName = keyof typeof RULES;
+/** The rules that take a value directly; `text` and `integerRange` build one. */
+export type RuleName = Exclude<keyof typeof RULES, "text" | "integerRange">;
 
 /** Runs the named rule over each field and collects the failures. */
 export function validate(

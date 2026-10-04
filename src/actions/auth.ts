@@ -12,7 +12,7 @@ import {
   validateCredentials,
 } from "@/lib/repositories/usersRepository";
 import { createSession, destroySession, getSession } from "@/lib/session";
-import type { UserAccount } from "@/lib/types";
+import type { Role, UserAccount } from "@/lib/types";
 import {
   type FormState,
   validate,
@@ -137,6 +137,20 @@ export async function requireSession(returnUrl: string) {
   if (!session) {
     redirect(`/login?returnUrl=${encodeURIComponent(returnUrl)}`);
   }
+
+  return session;
+}
+
+/**
+ * The guard for staff pages and their server actions. Signed-out visitors go
+ * to login and come back afterwards; anyone signed in with another role goes
+ * to /denied. Call it first, in every page and every action: hiding a button
+ * is not security, and an action can be posted without the page.
+ */
+export async function requireRole(returnUrl: string, ...roles: Role[]) {
+  const session = await requireSession(returnUrl);
+
+  if (!roles.includes(session.role)) redirect("/denied");
 
   return session;
 }

@@ -13,8 +13,27 @@ export function succeed<T>(data: T, status = 200): ServiceResult<T> {
   return { ok: true, status, data };
 }
 
-export function fail<T>(status: number, error: string): ServiceResult<T> {
-  return { ok: false, status, error };
+/** `field` names the input the error is about, so a form can show it there. */
+export function fail<T>(
+  status: number,
+  error: string,
+  field?: string,
+): ServiceResult<T> {
+  return field ? { ok: false, status, error, field } : { ok: false, status, error };
+}
+
+export const INVALID_INPUT = "The details sent were not in the expected shape.";
+
+/** A JSON object or a form's fields: not null, not an array, not a string. */
+export function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/** The outcome of reading one input: the clean value, or what was wrong. */
+export type Parsed<T> = { value: T } | { error: string; field: string };
+
+export function invalid<T>(parsed: { error: string; field: string }): ServiceResult<T> {
+  return fail(400, parsed.error, parsed.field);
 }
 
 /** Anything thrown by a repository, as a result that is safe to show. */

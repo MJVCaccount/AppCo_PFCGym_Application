@@ -4,7 +4,7 @@ import { Prisma } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
 import { record as audit } from "@/lib/repositories/auditRepository";
-import type { BoutResult, Fighter } from "@/lib/types";
+import type { AdminFighter, BoutResult, Fighter } from "@/lib/types";
 
 /** Data-access layer for fighters. A fighter's id is their member/user id. */
 
@@ -58,6 +58,22 @@ export async function listFighters(): Promise<Fighter[]> {
   });
 
   return rows.map(toFighter);
+}
+
+/** Every fighter, with whether the demote rule would let them go. */
+export async function listAdminFighters(): Promise<AdminFighter[]> {
+  const rows = await prisma.fighter.findMany({
+    orderBy: { fighterId: "asc" },
+    select: {
+      ...fighterSelect,
+      _count: { select: { participations: true, documents: true } },
+    },
+  });
+
+  return rows.map((row) => ({
+    ...toFighter(row),
+    canDemote: row._count.participations === 0 && row._count.documents === 0,
+  }));
 }
 
 export async function countFighters(): Promise<number> {

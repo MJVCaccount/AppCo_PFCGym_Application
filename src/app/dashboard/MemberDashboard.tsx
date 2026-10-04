@@ -2,7 +2,9 @@ import Link from "next/link";
 
 import { logout } from "@/actions/auth";
 import { cancelMembership } from "@/actions/gym";
+import { formatGymDate } from "@/lib/dates";
 import { getPlan } from "@/lib/repositories/plansRepository";
+import { memberStats } from "@/lib/services/coachService";
 import { getNextAvailableSlot } from "@/lib/repositories/timetableRepository";
 import { findById } from "@/lib/repositories/usersRepository";
 import { DAY_NAMES, formatPrice, initials } from "@/lib/types";
@@ -21,17 +23,19 @@ export default async function MemberDashboard({
   roleLabel?: string;
   children?: React.ReactNode;
 }) {
-  const [user, next] = await Promise.all([
+  const [user, next, stats] = await Promise.all([
     findById(session.id),
     getNextAvailableSlot(),
+    memberStats(session, session.id),
   ]);
   const plan =
     user?.planId != null
       ? await getPlan(user.planId, { includeInactive: true })
       : undefined;
 
-  const nextPayment = new Date();
-  nextPayment.setMonth(nextPayment.getMonth() + 1, 1);
+  const attended = stats.data?.attendedThisMonth ?? 0;
+  const upcoming = stats.data?.upcoming ?? 0;
+  const planStarted = stats.data?.planStartedAt;
 
   return (
     <div className="dash">
@@ -149,9 +153,13 @@ export default async function MemberDashboard({
                     marginTop: 4,
                   }}
                 >
-                  12
+                  {attended}
                 </p>
-                <p style={{ color: "var(--mut)" }}>classes attended</p>
+                <p style={{ color: "var(--mut)" }}>
+                  {attended === 1 ? "class attended" : "classes attended"}
+                  {" · "}
+                  {upcoming} upcoming
+                </p>
               </article>
 
               <article className="dash-card">
@@ -159,12 +167,8 @@ export default async function MemberDashboard({
                 {plan ? (
                   <>
                     <p style={{ color: "var(--mut)", marginTop: 6 }}>
-                      Next payment{" "}
-                      {nextPayment.toLocaleDateString("en-ZA", {
-                        day: "numeric",
-                        month: "long",
-                        year: "numeric",
-                      })}
+                      R{formatPrice(plan.pricePerMonth)} per month
+                      {planStarted ? `, since ${formatGymDate(planStarted)}` : ""}
                     </p>
                     <form action={cancelMembership}>
                       <button

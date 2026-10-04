@@ -6,11 +6,18 @@
 import assert from "node:assert/strict";
 
 import {
+  addDays,
   currentDayAndHour,
   formatEventDate,
+  formatSessionDate,
+  gymDateAndTime,
+  gymLocalToIso,
   hasSessionStarted,
   isoDate,
+  isoToGymLocal,
   nextOccurrence,
+  parseIsoDate,
+  startOfGymMonth,
 } from "../src/lib/dates";
 import type { DayKey } from "../src/lib/types";
 
@@ -157,6 +164,63 @@ check("formatEventDate rolls the date over when UTC is still the day before", ()
 
 check("formatEventDate returns an empty string for an unreadable value", () => {
   assert.equal(formatEventDate("not a date"), "");
+});
+
+console.log("\nADMIN AND COACH DATES");
+
+check("gymDateAndTime gives the Johannesburg date and time", () => {
+  // Monday 22:30 UTC = Tuesday 00:30 SAST
+  const { date, time } = gymDateAndTime(new Date("2026-10-05T22:30:00Z"));
+  assert.equal(date.toISOString(), "2026-10-06T00:00:00.000Z");
+  assert.equal(time, "00:30");
+});
+
+check("startOfGymMonth follows the Johannesburg calendar", () => {
+  // 31 October 22:30 UTC is already 1 November in Johannesburg.
+  assert.equal(
+    startOfGymMonth(new Date("2026-10-31T22:30:00Z")).toISOString(),
+    "2026-11-01T00:00:00.000Z",
+  );
+  assert.equal(
+    startOfGymMonth(new Date("2026-10-15T10:00:00Z")).toISOString(),
+    "2026-10-01T00:00:00.000Z",
+  );
+});
+
+check("parseIsoDate accepts real calendar days only", () => {
+  assert.equal(
+    parseIsoDate("2026-10-07")?.toISOString(),
+    "2026-10-07T00:00:00.000Z",
+  );
+  for (const bad of ["2026-02-30", "2026-13-01", "07/10/2026", "2026-10-7", "", null, 20261007, ["2026-10-07"]]) {
+    assert.equal(parseIsoDate(bad), null, String(bad));
+  }
+});
+
+check("addDays moves a date-only value across a month end", () => {
+  assert.equal(isoDate(addDays(new Date("2026-10-29T00:00:00Z"), 7)), "2026-11-05");
+  assert.equal(isoDate(addDays(new Date("2026-10-05T00:00:00Z"), -7)), "2026-09-28");
+});
+
+check("formatSessionDate names the weekday of an ISO date", () => {
+  assert.equal(formatSessionDate("2026-10-05"), "Mon 5 Oct 2026");
+  assert.equal(formatSessionDate("nonsense"), "");
+});
+
+check("a datetime-local value becomes an ISO string at +02:00, and back", () => {
+  assert.equal(gymLocalToIso("2026-11-28T19:00"), "2026-11-28T19:00:00+02:00");
+  assert.equal(
+    new Date(gymLocalToIso("2026-11-28T19:00")).toISOString(),
+    "2026-11-28T17:00:00.000Z",
+  );
+  // Anything else is handed on unchanged, for the service to reject.
+  assert.equal(gymLocalToIso("next friday"), "next friday");
+  assert.equal(gymLocalToIso(""), "");
+
+  assert.equal(isoToGymLocal("2026-11-28T17:00:00.000Z"), "2026-11-28T19:00");
+  // 23:30 UTC on New Year's Eve is 01:30 on 1 January in Johannesburg.
+  assert.equal(isoToGymLocal("2026-12-31T23:30:00.000Z"), "2027-01-01T01:30");
+  assert.equal(isoToGymLocal("not a date"), "");
 });
 
 console.log(`\n${passed} checks passed\n`);
