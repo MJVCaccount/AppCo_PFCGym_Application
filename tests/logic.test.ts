@@ -21,6 +21,7 @@ import {
   getTimetable,
   isOpenAt,
 } from "../src/lib/gym-data";
+import { hashPassword, verifyPassword } from "../src/lib/password";
 import {
   countByRole,
   createUser,
@@ -208,6 +209,22 @@ check("no plaintext password is stored anywhere", () => {
   for (const u of getAll()) {
     assert.ok(!JSON.stringify(u).includes("123!"), u.email);
   }
+});
+
+check("hashPassword gives a 64-byte key and a fresh 16-byte salt", () => {
+  const first = hashPassword("Testing123!");
+  const second = hashPassword("Testing123!");
+  assert.match(first.hash, /^[0-9a-f]{128}$/);
+  assert.match(first.salt, /^[0-9a-f]{32}$/);
+  assert.notEqual(first.salt, second.salt);
+  assert.notEqual(first.hash, second.hash);
+});
+
+check("verifyPassword accepts the right password only", () => {
+  const { hash, salt } = hashPassword("Testing123!");
+  assert.equal(verifyPassword("Testing123!", salt, hash), true);
+  assert.equal(verifyPassword("testing123!", salt, hash), false);
+  assert.equal(verifyPassword("Testing123!", salt, "abcd"), false);
 });
 
 check("session user carries no hash or salt", () => {

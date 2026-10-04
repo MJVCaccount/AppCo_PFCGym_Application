@@ -1,23 +1,14 @@
 import "server-only";
 
-import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
-
+import { hashPassword, verifyPassword } from "./password";
 import type { AppUser, Role, SessionUser } from "./types";
 
 /**
  * Accounts for the front-end deliverable.
  *
- * Passwords are hashed with scrypt, which is deliberately slow and memory-hard,
- * so a stolen hash list resists offline brute force. Each account gets its own
- * random salt, so two people choosing the same password still store different
- * hashes. Part 2 moves this table to the database; the hashing stays.
+ * Passwords are hashed with scrypt through password.ts, one random salt per
+ * account. Part 2 moves this table to the database; the hashing stays.
  */
-
-const KEY_LENGTH = 64;
-
-function hash(password: string, salt: string): string {
-  return scryptSync(password, salt, KEY_LENGTH).toString("hex");
-}
 
 function seed(
   id: number,
@@ -27,7 +18,7 @@ function seed(
   password: string,
   planId: number | null = null,
 ): AppUser {
-  const salt = randomBytes(16).toString("hex");
+  const { hash, salt } = hashPassword(password);
   return {
     id,
     email,
@@ -35,7 +26,7 @@ function seed(
     role,
     planId,
     passwordSalt: salt,
-    passwordHash: hash(password, salt),
+    passwordHash: hash,
   };
 }
 
@@ -93,15 +84,13 @@ export function validateCredentials(
   const user = findByEmail(email);
 
   if (!user) {
-    hash(password, "no-such-account");
+    hashPassword(password, "no-such-account");
     return null;
   }
 
-  const attempt = Buffer.from(hash(password, user.passwordSalt), "hex");
-  const stored = Buffer.from(user.passwordHash, "hex");
-
-  if (attempt.length !== stored.length) return null;
-  return timingSafeEqual(attempt, stored) ? user : null;
+  return verifyPassword(password, user.passwordSalt, user.passwordHash)
+    ? user
+    : null;
 }
 
 // ---------------------------------------------------------------- writes
@@ -112,7 +101,7 @@ export function createUser(input: {
   password: string;
   planId: number | null;
 }): AppUser {
-  const salt = randomBytes(16).toString("hex");
+  const { hash, salt } = hashPassword(input.password);
 
   const user: AppUser = {
     id: nextId++,
@@ -121,7 +110,7 @@ export function createUser(input: {
     role: "Member",
     planId: input.planId,
     passwordSalt: salt,
-    passwordHash: hash(input.password, salt),
+    passwordHash: hash,
   };
 
   users.push(user);

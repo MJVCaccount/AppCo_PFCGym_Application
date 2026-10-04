@@ -1,14 +1,289 @@
-// Prisma schema — Phase 1 foundation.
-// Datasource and generator only. Models are added in Phase 2, translated from
-// the domain/design class diagrams and ERD in the Task 1 document (User,
-// Member, Fighter, Coach, GymClass, Booking, MembershipPlan,
-// CompetitionEvent, EventParticipation).
-
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum Role {
+  Member
+  Fighter
+  Coach
+  Admin
+}
+
+enum Day {
+  mon
+  tue
+  wed
+  thu
+  fri
+  sat
+  sun
+}
+
+enum ClassKind {
+  Group
+  Private
+  Kids
+  Fighters
+}
+
+enum BookingStatus {
+  Pending
+  Confirmed
+  Failed
+  Completed
+  Cancelled
+  NoShow
+}
+
+enum Availability {
+  Pending
+  Accepted
+  Declined
+}
+
+enum BoutResult {
+  Win
+  Loss
+  Draw
+  NoContest
+}
+
+enum EventStatus {
+  Scheduled
+  Completed
+  Cancelled
+}
+
+enum DocumentType {
+  Medical
+  Licence
+  Other
+}
+
+enum DocumentStatus {
+  Pending
+  Approved
+  Rejected
+}
+
+model User {
+  id           Int                  @id @default(autoincrement())
+  email        String               @unique
+  fullName     String
+  phone        String?
+  role         Role
+  passwordHash String
+  passwordSalt String
+  isActive     Boolean              @default(true)
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
+  member       Member?
+  coach        Coach?
+  admin        Admin?
+  resetTokens  PasswordResetToken[]
+  auditLogs    AuditLog[]
+
+  @@index([role])
+}
+
+model Member {
+  membershipId  Int             @id
+  user          User            @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+  planId        Int?
+  plan          MembershipPlan? @relation(fields: [planId], references: [id], onDelete: SetNull)
+  planChangedAt DateTime?
+  cancelledAt   DateTime?
+  fighter       Fighter?
+  bookings      Booking[]
+}
+
+model Fighter {
+  fighterId      Int                  @id
+  member         Member               @relation(fields: [fighterId], references: [membershipId], onDelete: Cascade)
+  weightClass    String
+  wins           Int                  @default(0)
+  losses         Int                  @default(0)
+  draws          Int                  @default(0)
+  imageUrl       String?
+  participations EventParticipation[]
+  documents      FighterDocument[]
+}
+
+model Coach {
+  coachId  Int        @id
+  user     User       @relation(fields: [coachId], references: [id], onDelete: Cascade)
+  title    String
+  bio      String
+  imageUrl String?
+  isActive Boolean    @default(true)
+  classes  GymClass[]
+}
+
+model Admin {
+  adminId Int  @id
+  user    User @relation(fields: [adminId], references: [id], onDelete: Cascade)
+}
+
+model MembershipPlan {
+  id            Int      @id @default(autoincrement())
+  pricePerMonth Int
+  isMostPopular Boolean  @default(false)
+  features      String[]
+  sortOrder     Int      @default(0)
+  isActive      Boolean  @default(true)
+  members       Member[]
+}
+
+model ClassProgramme {
+  id              Int        @id @default(autoincrement())
+  name            String
+  slug            String     @unique
+  description     String
+  level           String
+  durationMinutes Int
+  isActive        Boolean    @default(true)
+  classes         GymClass[]
+}
+
+model GymClass {
+  id              Int             @id @default(autoincrement())
+  programmeId     Int?
+  programme       ClassProgramme? @relation(fields: [programmeId], references: [id], onDelete: SetNull)
+  name            String
+  kind            ClassKind       @default(Group)
+  coachId         Int
+  coach           Coach           @relation(fields: [coachId], references: [coachId], onDelete: Restrict)
+  day             Day
+  startsAt        String          @db.VarChar(5)
+  durationMinutes Int
+  capacity        Int
+  isActive        Boolean         @default(true)
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  bookings        Booking[]
+
+  @@unique([coachId, day, startsAt])
+  @@index([day, startsAt])
+}
+
+model Booking {
+  id            Int           @id @default(autoincrement())
+  memberId      Int
+  member        Member        @relation(fields: [memberId], references: [membershipId], onDelete: Restrict)
+  gymClassId    Int
+  gymClass      GymClass      @relation(fields: [gymClassId], references: [id], onDelete: Restrict)
+  sessionDate   DateTime      @db.Date
+  status        BookingStatus @default(Pending)
+  failureReason String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  cancelledAt   DateTime?
+  completedAt   DateTime?
+
+  @@unique([memberId, gymClassId, sessionDate])
+  @@index([gymClassId, sessionDate, status])
+  @@index([memberId, sessionDate])
+}
+
+model CompetitionEvent {
+  id             Int                  @id @default(autoincrement())
+  name           String
+  eventDate      DateTime
+  venue          String
+  description    String
+  imageUrl       String?
+  status         EventStatus          @default(Scheduled)
+  createdAt      DateTime             @default(now())
+  participations EventParticipation[]
+
+  @@index([eventDate])
+}
+
+model EventParticipation {
+  id              Int              @id @default(autoincrement())
+  fighterId       Int
+  fighter         Fighter          @relation(fields: [fighterId], references: [fighterId], onDelete: Cascade)
+  eventId         Int
+  event           CompetitionEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  availability    Availability     @default(Pending)
+  opponentName    String?
+  boutWeightClass String?
+  boutNotes       String?
+  result          BoutResult?
+  resultNotes     String?
+  offeredAt       DateTime         @default(now())
+  respondedAt     DateTime?
+
+  @@unique([fighterId, eventId])
+}
+
+model FighterDocument {
+  id         Int            @id @default(autoincrement())
+  fighterId  Int
+  fighter    Fighter        @relation(fields: [fighterId], references: [fighterId], onDelete: Cascade)
+  type       DocumentType
+  fileName   String
+  fileUrl    String
+  status     DocumentStatus @default(Pending)
+  reviewNote String?
+  reviewedAt DateTime?
+  uploadedAt DateTime       @default(now())
+
+  @@index([fighterId])
+}
+
+model ContactEnquiry {
+  id          Int       @id @default(autoincrement())
+  fullName    String
+  email       String
+  phone       String?
+  message     String
+  emailSentAt DateTime?
+  handledAt   DateTime?
+  createdAt   DateTime  @default(now())
+}
+
+model PasswordResetToken {
+  id        Int       @id @default(autoincrement())
+  userId    Int
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+}
+
+model AuditLog {
+  id        Int      @id @default(autoincrement())
+  actorId   Int?
+  actor     User?    @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  action    String
+  entity    String
+  entityId  Int?
+  detail    Json?
+  createdAt DateTime @default(now())
+
+  @@index([entity, entityId])
+}
+
+model Review {
+  id         Int      @id @default(autoincrement())
+  memberName String
+  body       String
+  rating     Int
+  postedOn   DateTime @db.Date
+}
+
+model OpeningHours {
+  day    Day @id
+  opens  Int
+  closes Int
 }
