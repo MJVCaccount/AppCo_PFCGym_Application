@@ -1,6 +1,7 @@
 import "server-only";
 
 import { logger } from "@/lib/logger";
+import { parsePublicImageUrl } from "@/lib/publicImage";
 import {
   createEvent as insertEvent,
   type EventFields,
@@ -61,9 +62,6 @@ const EVENT_CLOSED = "That event is no longer open for bout offers.";
 const NOT_SCHEDULED = "Only a scheduled event can be changed that way.";
 const NOT_HAPPENED = "The event has not happened yet.";
 
-/** Vercel Blob serves public files from <store>.public.blob.vercel-storage.com. */
-const BLOB_HOST_SUFFIX = ".public.blob.vercel-storage.com";
-
 // An explicit offset is required. Without one the same text would mean a
 // different instant depending on the time zone of the machine that parsed it.
 const ISO_INSTANT =
@@ -102,25 +100,6 @@ function parseEventDate(value: unknown): Parsed<Date> {
 
   const date = new Date(value.trim());
   return Number.isNaN(date.getTime()) ? error : { value: date };
-}
-
-function parseImageUrl(value: unknown): Parsed<string | null> {
-  const error = {
-    error: "Image URL must be an https link to an uploaded image, or empty.",
-  };
-  if (!isOptionalString(value)) return error;
-
-  const text = optionalText(value);
-  if (text === null) return { value: null };
-
-  try {
-    const url = new URL(text);
-    const allowed =
-      url.protocol === "https:" && url.hostname.endsWith(BLOB_HOST_SUFFIX);
-    return allowed ? { value: url.toString() } : error;
-  } catch {
-    return error;
-  }
 }
 
 /** An optional text field of at most `max` characters, blank stored as null. */
@@ -174,7 +153,7 @@ function parseEventFields(
   }
 
   if (!partial || input.imageUrl !== undefined) {
-    const image = parseImageUrl(input.imageUrl);
+    const image = parsePublicImageUrl(input.imageUrl);
     if ("error" in image) return image;
     fields.imageUrl = image.value;
   }

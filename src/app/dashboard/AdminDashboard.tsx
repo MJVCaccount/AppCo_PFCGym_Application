@@ -10,6 +10,9 @@ import { countByRole, getAll } from "@/lib/repositories/usersRepository";
 import { initials, isFull } from "@/lib/types";
 import type { SessionUser } from "@/lib/types";
 
+/** How many accounts the dashboard lists; the full list is /admin/members. */
+const DASHBOARD_USERS = 20;
+
 export default async function AdminDashboard({
   session,
 }: {
@@ -26,7 +29,7 @@ export default async function AdminDashboard({
     pendingOfferCount,
   ] = await Promise.all([
     getTimetable(),
-    getAll(),
+    getAll(DASHBOARD_USERS),
     getClasses(),
     countByRole("Member"),
     countByRole("Coach"),

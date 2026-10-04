@@ -1,6 +1,7 @@
 import "server-only";
 
 import { logger } from "@/lib/logger";
+import { parsePublicImageUrl } from "@/lib/publicImage";
 import {
   archiveCoach as archiveRow,
   type CoachFields,
@@ -17,13 +18,11 @@ import {
   invalid,
   INVALID_INPUT,
   isAdmin,
-  isOptionalString,
   isRecord,
   isValidId,
   type Parsed,
   succeed,
 } from "@/lib/services/serviceResult";
-import { optionalText } from "@/lib/text";
 import type { AdminCoach, ServiceResult, SessionUser } from "@/lib/types";
 import { RULES } from "@/lib/validation";
 
@@ -84,13 +83,12 @@ function parseCoachFields(
     fields.bio = (input.bio as string).trim();
   }
 
-  // Optional: left out, null and "" all mean "no image".
+  // Optional: left out, null and "" all mean "no image". Anything else must
+  // be a link to the public Blob store, exactly as for event images.
   if (input.imageUrl !== undefined || !partial) {
-    const error = isOptionalString(input.imageUrl)
-      ? RULES.url(input.imageUrl ?? "")
-      : "Image URL must be text.";
-    if (error) return { error, field: "imageUrl" };
-    fields.imageUrl = optionalText(input.imageUrl);
+    const image = parsePublicImageUrl(input.imageUrl);
+    if ("error" in image) return { error: image.error, field: "imageUrl" };
+    fields.imageUrl = image.value;
   }
 
   return { value: fields };

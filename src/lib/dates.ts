@@ -89,6 +89,12 @@ export function parseIsoDate(value: unknown): Date | null {
   return date;
 }
 
+/** The weekday of a date-only value (UTC midnight), as the gym's day key. */
+export function dayOfDate(date: Date): DayKey {
+  // getUTCDay: Sunday is 0; DAY_ORDER starts on Monday.
+  return DAY_ORDER[(date.getUTCDay() + 6) % 7];
+}
+
 /** A date-only value moved by a number of days. */
 export function addDays(date: Date, days: number): Date {
   return new Date(date.getTime() + days * MS_PER_DAY);

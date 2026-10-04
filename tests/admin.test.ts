@@ -8,7 +8,7 @@ import assert from "node:assert/strict";
 
 import { resetDatabase, testDb } from "./helpers/db";
 
-import { addDays, gymDateAndTime, isoDate, nextOccurrence } from "../src/lib/dates";
+import { addDays, dayOfDate, gymDateAndTime, isoDate, nextOccurrence } from "../src/lib/dates";
 import { getCoaches } from "../src/lib/repositories/coachesRepository";
 import {
   createProgramme,
@@ -408,6 +408,11 @@ async function main() {
       [{ bio: "short" }, "bio"],
       [{ imageUrl: "http://example.co.za/a.jpg" }, "imageUrl"],
       [{ imageUrl: 5 }, "imageUrl"],
+      // https, but not the public Blob store: it would save and then show the monogram
+      [{ imageUrl: "https://example.co.za/a.jpg" }, "imageUrl"],
+      [{ imageUrl: "https://public.blob.vercel-storage.com.evil.example/a.jpg" }, "imageUrl"],
+      [{ imageUrl: "javascript:alert(1)" }, "imageUrl"],
+      [{ imageUrl: ["https://abc.public.blob.vercel-storage.com/a.jpg"] }, "imageUrl"],
     ];
     for (const [override, field] of cases) {
       const r = await createCoach(admin, { ...coachInput, email: "third@example.co.za", ...override });
@@ -418,8 +423,13 @@ async function main() {
 
   await check("updateCoach changes the profile and the name, and rejects a taken email", async () => {
     const r = await updateCoach(admin, newCoachId, { title: "Kickboxing lead", imageUrl: "https://example.co.za/eve.jpg" });
-    assert.equal(r.status, 200);
-    assert.equal(r.data?.title, "Kickboxing lead");
+    assert.equal(r.status, 400, "a link that is not on the public Blob store is refused");
+    assert.equal(r.field, "imageUrl");
+    const blob = "https://abc123.public.blob.vercel-storage.com/images/eve.jpg";
+    const saved = await updateCoach(admin, newCoachId, { title: "Kickboxing lead", imageUrl: blob });
+    assert.equal(saved.status, 200, saved.error);
+    assert.equal(saved.data?.imageUrl, blob);
+    assert.equal(saved.data?.title, "Kickboxing lead");
     assert.equal((await updateCoach(admin, newCoachId, { imageUrl: null })).data?.imageUrl, null);
     assert.equal((await updateCoach(admin, newCoachId, { email: "sofia@pfc.co.za" })).status, 409);
     assert.equal((await updateCoach(admin, 999_999, { title: "Nobody" })).status, 404);
@@ -680,22 +690,25 @@ async function main() {
 
   const sofiaClass = await testDb.gymClass.findFirstOrThrow({ where: { coachId: sofia.id, day: "tue", startsAt: "09:30" } });
   const marcusClass = await testDb.gymClass.findFirstOrThrow({ where: { coachId: marcus.id, day: "tue", startsAt: "18:00" } });
-  const yesterday = addDays(today, -1);
+  // A Tuesday before today: both classes meet on Tuesdays, and a roster date
+  // must fall on the class's weekday. (The real clock decides what "today" is.)
+  let pastTuesday = addDays(today, -1);
+  while (dayOfDate(pastTuesday) !== "tue") pastTuesday = addDays(pastTuesday, -1);
 
   const pastBooking = await testDb.booking.create({
-    data: { memberId: fillers[4].id, gymClassId: sofiaClass.id, sessionDate: yesterday, status: "Confirmed" },
+    data: { memberId: fillers[4].id, gymClassId: sofiaClass.id, sessionDate: pastTuesday, status: "Confirmed" },
   });
   const pastBooking2 = await testDb.booking.create({
-    data: { memberId: fillers[5].id, gymClassId: sofiaClass.id, sessionDate: yesterday, status: "Confirmed" },
+    data: { memberId: fillers[5].id, gymClassId: sofiaClass.id, sessionDate: pastTuesday, status: "Confirmed" },
   });
   const cancelled = await testDb.booking.create({
-    data: { memberId: fillers[3].id, gymClassId: sofiaClass.id, sessionDate: yesterday, status: "Cancelled" },
+    data: { memberId: fillers[3].id, gymClassId: sofiaClass.id, sessionDate: pastTuesday, status: "Cancelled" },
   });
   const futureBooking = await testDb.booking.create({
     data: { memberId: fillers[4].id, gymClassId: sofiaClass.id, sessionDate: addDays(today, 3), status: "Confirmed" },
   });
   const marcusBooking = await testDb.booking.create({
-    data: { memberId: fillers[4].id, gymClassId: marcusClass.id, sessionDate: yesterday, status: "Confirmed" },
+    data: { memberId: fillers[4].id, gymClassId: marcusClass.id, sessionDate: pastTuesday, status: "Confirmed" },
   });
 
   await check("coachStats is null with no attendance recorded", async () => {
@@ -714,29 +727,50 @@ async function main() {
   });
 
   await check("a coach asking for someone else's roster gets 404, never 403", async () => {
-    const theirs = await getRoster(sofia, marcusClass.id, isoDate(yesterday), now);
-    const missing = await getRoster(sofia, 999_999, isoDate(yesterday), now);
+    const theirs = await getRoster(sofia, marcusClass.id, isoDate(pastTuesday), now);
+    const missing = await getRoster(sofia, 999_999, isoDate(pastTuesday), now);
     assert.equal(theirs.status, 404);
     assert.equal(missing.status, 404);
     assert.equal(theirs.error, missing.error);
   });
 
   await check("the roster names members and statuses and says whether marking is open", async () => {
-    const r = await getRoster(sofia, sofiaClass.id, isoDate(yesterday), now);
+    const r = await getRoster(sofia, sofiaClass.id, isoDate(pastTuesday), now);
     assert.equal(r.status, 200);
     assert.equal(r.data?.canMark, true);
     const names = r.data!.entries.map((e) => e.memberName);
     assert.deepEqual(names, [...names].sort());
     assert.ok(r.data!.entries.some((e) => e.bookingId === cancelled.id && e.status === "Cancelled"));
 
-    const future = await getRoster(sofia, sofiaClass.id, isoDate(addDays(today, 3)), now);
+    // The class meets on Tuesdays; two weeks after a past Tuesday is always in the future.
+    const future = await getRoster(sofia, sofiaClass.id, isoDate(addDays(pastTuesday, 14)), now);
+    assert.equal(future.status, 200);
     assert.equal(future.data?.canMark, false);
-    assert.equal((await getRoster(admin, marcusClass.id, isoDate(yesterday), now)).status, 200);
+    assert.equal((await getRoster(admin, marcusClass.id, isoDate(pastTuesday), now)).status, 200);
 
     for (const bad of ["2026-02-30", "tomorrow", "", null, 5]) {
       assert.equal((await getRoster(sofia, sofiaClass.id, bad, now)).status, 400, String(bad));
     }
-    assert.equal((await getRoster(sofia, "x", isoDate(yesterday), now)).status, 400);
+    assert.equal((await getRoster(sofia, "x", isoDate(pastTuesday), now)).status, 400);
+  });
+
+  await check("a roster date that is not the class's weekday is a 400 on the date", async () => {
+    // sofiaClass meets on Tuesdays; every other weekday around pastTuesday is wrong.
+    for (const offset of [1, 2, 3, 4, 5, 6]) {
+      const date = isoDate(addDays(pastTuesday, offset));
+      for (const who of [sofia, admin]) {
+        const r = await getRoster(who, sofiaClass.id, date, now);
+        assert.equal(r.status, 400, `${date} for ${who.role}`);
+        assert.equal(r.field, "date");
+        assert.match(r.error ?? "", /meets on Tuesdays/);
+      }
+    }
+    // Ownership is checked first, so a wrong date cannot be used to probe ids.
+    const probe = await getRoster(sofia, marcusClass.id, isoDate(addDays(pastTuesday, 1)), now);
+    assert.equal(probe.status, 404);
+    assert.equal((await getRoster(sofia, 999_999, isoDate(addDays(pastTuesday, 1)), now)).status, 404);
+    assert.equal((await getRoster(sofia, sofiaClass.id, isoDate(addDays(pastTuesday, 14)), now)).status, 200);
+    assert.equal((await getRoster(sofia, sofiaClass.id, isoDate(addDays(pastTuesday, -7)), now)).status, 200);
   });
 
   await check("a coach cannot mark another coach's booking: 404", async () => {
@@ -759,7 +793,7 @@ async function main() {
     const r = await markAttendance(sofia, cancelled.id, "NoShow", now);
     assert.equal(r.status, 409);
     const failed = await testDb.booking.create({
-      data: { memberId: fillers[2].id, gymClassId: sofiaClass.id, sessionDate: yesterday, status: "Failed" },
+      data: { memberId: fillers[2].id, gymClassId: sofiaClass.id, sessionDate: pastTuesday, status: "Failed" },
     });
     assert.equal((await markAttendance(sofia, failed.id, "Completed", now)).status, 409);
   });

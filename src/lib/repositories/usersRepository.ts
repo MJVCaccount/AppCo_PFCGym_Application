@@ -94,9 +94,14 @@ export async function findById(id: number): Promise<UserAccount | undefined> {
   return row ? toAccount(row) : undefined;
 }
 
-export async function getAll(): Promise<UserAccount[]> {
+/**
+ * Accounts by id. Pass `limit` for anything a person reads: the dashboard
+ * shows the first few and /admin/members pages through the rest.
+ */
+export async function getAll(limit?: number): Promise<UserAccount[]> {
   const rows = await prisma.user.findMany({
     orderBy: { id: "asc" },
+    take: limit,
     select: accountSelect,
   });
 

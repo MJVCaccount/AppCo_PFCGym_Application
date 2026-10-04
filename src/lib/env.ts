@@ -58,8 +58,19 @@ export function isEmailConfigured(): boolean {
   );
 }
 
+/** Why SESSION_SECRET is unusable in production, or null when it is fine. */
+export function sessionSecretProblem(value: string | undefined): string | null {
+  if (!isProduction()) return null;
+
+  return (value ?? "").length >= 32
+    ? null
+    : "SESSION_SECRET must be set to at least 32 characters in production.";
+}
+
 /** Called once when the server starts (see src/instrumentation.ts). */
 export function validateEnv(): void {
-  const problem = appUrlProblem(process.env.APP_URL);
+  const problem =
+    appUrlProblem(process.env.APP_URL) ??
+    sessionSecretProblem(process.env.SESSION_SECRET);
   if (problem) throw new Error(`Invalid environment: ${problem}`);
 }

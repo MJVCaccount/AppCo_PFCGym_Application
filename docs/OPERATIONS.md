@@ -60,11 +60,12 @@ different databases). The list is `.env.example`:
 | `RESEND_API_KEY`, `EMAIL_FROM`, `CONTACT_INBOX` | Email. Without the first two no email is sent and the app keeps working |
 | `PUBLIC_BLOB_STORE_ID`, `PRIVATE_BLOB_STORE_ID` | The two Vercel Blob stores (images; fighters' documents) |
 | `CSP_REPORT_ONLY` | Optional. `1` sends the Content-Security-Policy as report-only |
+| `RATE_LIMIT_MULTIPLIER` | Optional. Whole number 1 to 20 (default 1; anything else is ignored). Multiplies every rate limit, for a busy day such as the EXPO when many people share one address. Takes effect on the next request; set it back to 1 afterwards |
 
 Local only, never set in Vercel or GitHub: `TEST_DATABASE_URL`,
 `PUBLIC_BLOB_READ_WRITE_TOKEN`, `PRIVATE_BLOB_READ_WRITE_TOKEN`,
 `SEED_ALLOWED_HOSTS` (the Neon dev host) and `SEED_CONFIRM_HOST` (set for one
-command only).
+command only), and `SMOKE_BYPASS_SECRET`.
 
 ## First-deploy checklist
 
@@ -91,9 +92,11 @@ command only).
 
 ## Seeding production once
 
-The seed creates demo accounts with known passwords, so it refuses any host
-that is not localhost, listed in `SEED_ALLOWED_HOSTS` or named in
-`SEED_CONFIRM_HOST` (`prisma/seedGuard.ts`). To seed production once, after the
+The seed creates demo accounts with known passwords, for the module
+demonstration only, so it refuses any host that is not localhost, listed in
+`SEED_ALLOWED_HOSTS` or named in `SEED_CONFIRM_HOST` (`prisma/seedGuard.ts`).
+It also re-applies the demo passwords on every run, so never seed a database
+real members use. To seed production once, after the
 first deploy has applied the migrations, run this in PowerShell. It sets the
 variables for this command only and removes them afterwards:
 

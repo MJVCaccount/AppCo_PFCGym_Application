@@ -17,7 +17,7 @@
   --red-deep:#2A0505;
   --txt:#FFFFFF;
   --mut:#9C9C9C;
-  --mut-2:#6E6E6E;
+  --mut-2:#8C8C8C;
   --ok:#2ECC71;
 
   --r-card:14px;
@@ -342,7 +342,7 @@ h3{font-size:var(--fs-h3);letter-spacing:-.01em}
   transition:border-color .18s var(--ease);
 }
 .field textarea{min-height:130px;resize:vertical}
-.field input::placeholder,.field textarea::placeholder{color:#6A6A6A}
+.field input::placeholder,.field textarea::placeholder{color:#8C8C8C}
 .field input:focus,.field textarea:focus,.field select:focus{border-color:var(--red);outline:none}
 .field input[aria-invalid="true"],.field textarea[aria-invalid="true"]{border-color:#FF4D4D}
 .field .error{display:block;margin-top:6px;font-size:11px;color:#FF6B6B;min-height:14px}

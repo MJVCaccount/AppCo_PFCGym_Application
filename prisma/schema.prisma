@@ -224,6 +224,7 @@ model EventParticipation {
   respondedAt     DateTime?
 
   @@unique([fighterId, eventId])
+  @@index([eventId])
 }
 
 model FighterDocument {

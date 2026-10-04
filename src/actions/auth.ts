@@ -25,6 +25,7 @@ import {
   firstDenied,
   tooManyAttempts,
 } from "@/lib/rateLimit";
+import { safeReturnPath } from "@/lib/returnUrl";
 import { createSession, destroySession, getSession } from "@/lib/session";
 import type { Role, UserAccount } from "@/lib/types";
 import {
@@ -87,13 +88,9 @@ export async function login(
   await createSession(toSessionUser(user));
   revalidatePath("/", "layout");
 
-  const requested = String(data.get("returnUrl") ?? "");
   // Only follow a path on this site. An absolute URL here would be an open
   // redirect: an attacker could send a login link that bounces to their page.
-  const target =
-    requested.startsWith("/") && !requested.startsWith("//")
-      ? requested
-      : "/dashboard";
+  const target = safeReturnPath(data.get("returnUrl")) ?? "/dashboard";
 
   redirect(target);
 }

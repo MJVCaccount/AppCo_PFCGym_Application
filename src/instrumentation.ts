@@ -1,7 +1,7 @@
 /**
- * Runs once when the server starts. A bad APP_URL stops a production server
- * from starting at all, instead of sending password reset links that point
- * somewhere wrong.
+ * Runs once when the server starts. A bad APP_URL or a missing SESSION_SECRET
+ * stops a production server from starting at all, instead of sending password
+ * reset links that point somewhere wrong or failing every sign-in later.
  */
 export async function register(): Promise<void> {
   if (process.env.NEXT_RUNTIME !== "nodejs") return;

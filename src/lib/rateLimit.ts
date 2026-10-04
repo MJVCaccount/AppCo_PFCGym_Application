@@ -118,14 +118,38 @@ export function limitKey(policy: PolicyName, identifier: string): string {
   return `${policy}:${sha256(identifier)}`;
 }
 
+const MAX_MULTIPLIER = 20;
+
+/**
+ * RATE_LIMIT_MULTIPLIER scales every limit in POLICIES, so a busy day (a crowd
+ * on one venue network shares one address) can be relaxed from the Vercel
+ * dashboard without a deploy. Only a whole number from 1 to 20
+ * counts: anything else (blank, 0, 2.5, -3, "lots", 21) is ignored and the
+ * limits stay as written. Windows are never changed, only the counts.
+ */
+export function rateLimitMultiplier(
+  value: string | undefined = process.env.RATE_LIMIT_MULTIPLIER,
+): number {
+  const text = value?.trim() ?? "";
+  if (!/^[0-9]{1,2}$/.test(text)) return 1;
+
+  const multiplier = Number(text);
+  return multiplier >= 1 && multiplier <= MAX_MULTIPLIER ? multiplier : 1;
+}
+
+/** The limit of a policy after RATE_LIMIT_MULTIPLIER. */
+export function effectiveLimit(policy: PolicyName): number {
+  return POLICIES[policy].limit * rateLimitMultiplier();
+}
+
 /** Counts one hit for `identifier` under a named policy. */
 export function checkLimit(
   policy: PolicyName,
   identifier: string,
 ): Promise<RateLimitResult> {
-  const { limit, windowSeconds, failClosed } = POLICIES[policy];
+  const { windowSeconds, failClosed } = POLICIES[policy];
 
-  return rateLimit(limitKey(policy, identifier), limit, windowSeconds, {
+  return rateLimit(limitKey(policy, identifier), effectiveLimit(policy), windowSeconds, {
     onError: failClosed ? "closed" : "open",
   });
 }

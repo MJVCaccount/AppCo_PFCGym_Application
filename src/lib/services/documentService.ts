@@ -96,10 +96,16 @@ export async function uploadFighterDocument(
       return storageFailure(e);
     }
 
-    const result = await createDocument(
-      { fighterId: session.id, type: type as DocumentType, fileName, pathname },
-      MAX_DOCUMENTS_PER_FIGHTER,
-    );
+    let result: Awaited<ReturnType<typeof createDocument>>;
+    try {
+      result = await createDocument(
+        { fighterId: session.id, type: type as DocumentType, fileName, pathname },
+        MAX_DOCUMENTS_PER_FIGHTER,
+      );
+    } catch (e) {
+      await removeBlob(pathname); // the row was not saved, so nothing points at it
+      return failure(e);
+    }
 
     if (!result.ok) {
       await removeBlob(pathname); // nothing points at it

@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 
 import Alert from "@/components/Alert";
 import LoginForm from "@/components/LoginForm";
+import { safeReturnPath } from "@/lib/returnUrl";
 import { getSession } from "@/lib/session";
 import { firstParam, type SearchParams } from "@/lib/types";
 
@@ -31,10 +32,7 @@ export default async function LoginPage({
 
   // Only ever hand a path back to the form. An absolute URL would let a
   // crafted login link bounce the user to another site after signing in.
-  const safeReturn =
-    returnUrl?.startsWith("/") && !returnUrl.startsWith("//")
-      ? returnUrl
-      : undefined;
+  const safeReturn = safeReturnPath(returnUrl) ?? undefined;
 
   return (
     <section className="auth">

@@ -2,6 +2,7 @@ import "server-only";
 
 import {
   currentDayAndHour,
+  dayOfDate,
   gymDateAndTime,
   isoDate,
   nextOccurrence,
@@ -28,6 +29,7 @@ import {
 import {
   type AttendanceStats,
   type CoachClass,
+  DAY_NAMES,
   type MemberStats,
   ROLES,
   type Roster,
@@ -111,6 +113,15 @@ export async function getRoster(
 
     if (!gymClass || (scope !== null && gymClass.coachId !== scope)) {
       return fail(404, NOT_FOUND_CLASS);
+    }
+
+    // After the ownership check, so a date cannot be used to probe class ids.
+    if (dayOfDate(date) !== gymClass.day) {
+      return fail(
+        400,
+        `That class meets on ${DAY_NAMES[gymClass.day]}s, so ${isoDate(date)} is not a session date.`,
+        "date",
+      );
     }
 
     return succeed({

@@ -6,6 +6,8 @@ export const metadata: Metadata = {
   description: "PFC fight promotions, cards and results.",
 };
 
+export const dynamic = "force-dynamic";
+
 export default function PromoPage() {
   return (
     <section className="auth">

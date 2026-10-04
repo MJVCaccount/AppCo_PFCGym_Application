@@ -133,8 +133,8 @@ async function futureCount(
 
 /**
  * Every scheduled class, active or not, in timetable order, with its booked
- * figures. One query fetches the Confirmed bookings from today onwards and
- * both figures are counted from it.
+ * figures. One grouped query counts the Confirmed bookings from today onwards
+ * and both figures are added up from it.
  */
 export async function listClasses(now: Date = new Date()): Promise<AdminClass[]> {
   const rows = await prisma.gymClass.findMany({
@@ -144,9 +144,11 @@ export async function listClasses(now: Date = new Date()): Promise<AdminClass[]>
   if (rows.length === 0) return [];
 
   const { date: today, time } = gymDateAndTime(now);
-  const bookings = await prisma.booking.findMany({
+  // One grouped count, not every booking row: (class, session date, count).
+  const groups = await prisma.booking.groupBy({
+    by: ["gymClassId", "sessionDate"],
     where: { status: "Confirmed", sessionDate: { gte: today } },
-    select: { gymClassId: true, sessionDate: true },
+    _count: { _all: true },
   });
 
   return rows.map((row) => {
@@ -154,12 +156,14 @@ export async function listClasses(now: Date = new Date()): Promise<AdminClass[]>
     let booked = 0;
     let future = 0;
 
-    for (const booking of bookings) {
-      if (booking.gymClassId !== row.id) continue;
+    for (const group of groups) {
+      if (group.gymClassId !== row.id) continue;
 
-      const session = booking.sessionDate.getTime();
-      if (session === next) booked++;
-      if (session > today.getTime() || row.startsAt > time) future++;
+      const session = group.sessionDate.getTime();
+      if (session === next) booked += group._count._all;
+      if (session > today.getTime() || row.startsAt > time) {
+        future += group._count._all;
+      }
     }
 
     return toAdminClass(row, booked, future);

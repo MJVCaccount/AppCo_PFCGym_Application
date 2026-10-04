@@ -13,7 +13,12 @@ import { randomBytes } from "node:crypto";
 import { PrismaClient } from "@prisma/client";
 import type { Day, Role } from "@prisma/client";
 
-import { nextOccurrence } from "../src/lib/dates";
+import {
+  addDays,
+  gymDateAndTime,
+  isoDate,
+  nextOccurrence,
+} from "../src/lib/dates";
 import { hashPassword } from "../src/lib/password";
 import { checkSeedTarget } from "./seedGuard";
 
@@ -229,7 +234,16 @@ const timetable: {
 ];
 
 const FILLER_COUNT = 24;
-const MS_PER_DAY = 24 * 60 * 60 * 1000;
+/**
+ * 19:00 Johannesburg time, `days` calendar days from today on the gym's clock.
+ * Built from the gym's date, not the clock time of the seed run, so the demo
+ * events always show a sensible evening start. South Africa has no daylight
+ * saving, so +02:00 is always right.
+ */
+function eveningEvent(now: Date, days: number): Date {
+  const day = addDays(gymDateAndTime(now).date, days);
+  return new Date(`${isoDate(day)}T19:00:00+02:00`);
+}
 
 // ---------------------------------------------------------------- helpers
 
@@ -475,14 +489,14 @@ async function main() {
   // Competition events
   const firstEventId = await upsertEvent({
     name: "PFC Fight Night",
-    eventDate: new Date(now.getTime() + 30 * MS_PER_DAY),
+    eventDate: eveningEvent(now, 30),
     venue: "PFC Gym, main arena",
     description:
       "An evening of amateur boxing, Muay Thai and MMA bouts featuring PFC fighters.",
   });
   await upsertEvent({
     name: "PFC Regional Championship",
-    eventDate: new Date(now.getTime() + 75 * MS_PER_DAY),
+    eventDate: eveningEvent(now, 75),
     venue: "City Sports Centre",
     description:
       "Regional championship card with title bouts across the weight classes.",

@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { gymDateAndTime } from "@/lib/dates";
 import { getOpeningHours } from "@/lib/repositories/hoursRepository";
 import { DAY_NAMES, formatHours } from "@/lib/types";
 
@@ -87,7 +88,7 @@ export default async function Footer() {
 
         <div className="footer__legal">
           <p>
-            &copy; {new Date().getFullYear()} Professional Fighting
+            &copy; {gymDateAndTime(new Date()).date.getUTCFullYear()} Professional Fighting
             Championship. All rights reserved.
           </p>
           <nav aria-label="Legal">
