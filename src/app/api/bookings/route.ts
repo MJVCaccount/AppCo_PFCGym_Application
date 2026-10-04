@@ -1,7 +1,14 @@
 import { NextResponse } from "next/server";
 
+import { rateLimitedResponse } from "@/lib/api";
+import { readJson } from "@/lib/json";
+import { logger } from "@/lib/logger";
+import { checkLimit } from "@/lib/rateLimit";
 import { createBooking } from "@/lib/services/bookingService";
 import { getSession } from "@/lib/session";
+import { assertSameOrigin } from "@/lib/origin";
+
+export const dynamic = "force-dynamic";
 
 /**
  * POST /api/bookings  { "slotId": number }
@@ -12,6 +19,9 @@ import { getSession } from "@/lib/session";
  * server action stays for the existing timetable page form.
  */
 export async function POST(request: Request) {
+  const blocked = assertSameOrigin(request);
+  if (blocked) return blocked;
+
   try {
     const session = await getSession();
     if (!session) {
@@ -21,22 +31,19 @@ export async function POST(request: Request) {
       );
     }
 
-    let body: unknown;
-    try {
-      body = await request.json();
-    } catch {
-      return NextResponse.json(
-        { error: { message: "Request body must be valid JSON." } },
-        { status: 400 },
-      );
-    }
+    const limit = await checkLimit("booking", String(session.id));
+    if (!limit.allowed) return rateLimitedResponse(limit);
+
+    const read = await readJson(request);
+    if (!read.ok) return read.response;
+    const body = read.data;
 
     const slotId =
       typeof body === "object" && body !== null && "slotId" in body
         ? Number((body as Record<string, unknown>).slotId)
         : NaN;
 
-    const result = createBooking(session, slotId);
+    const result = await createBooking(session, slotId);
 
     if (!result.ok) {
       return NextResponse.json(
@@ -46,7 +53,8 @@ export async function POST(request: Request) {
     }
 
     return NextResponse.json({ data: result.slot }, { status: result.status });
-  } catch {
+  } catch (e) {
+    logger.error("POST /api/bookings failed", { error: e });
     return NextResponse.json(
       { error: { message: "Could not complete the booking." } },
       { status: 500 },

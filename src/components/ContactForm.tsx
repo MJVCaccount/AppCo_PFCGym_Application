@@ -52,6 +52,28 @@ export default function ContactForm() {
         error={state.errors?.message}
       />
 
+      {/* Honeypot: hidden from people and assistive technology; bots fill it in. */}
+      <div
+        aria-hidden="true"
+        style={{
+          position: "absolute",
+          left: "-10000px",
+          width: 1,
+          height: 1,
+          overflow: "hidden",
+        }}
+      >
+        <label htmlFor="contact-website">Leave this field empty</label>
+        <input
+          id="contact-website"
+          name="website"
+          type="text"
+          tabIndex={-1}
+          autoComplete="off"
+          defaultValue=""
+        />
+      </div>
+
       {state.message && (
         <div className="field--full">
           <Alert kind={state.ok ? "ok" : "err"}>{state.message}</Alert>

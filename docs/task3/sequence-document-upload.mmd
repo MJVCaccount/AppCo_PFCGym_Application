@@ -1,0 +1,58 @@
+%% Source: src/app/api/fighter/documents/route.ts, src/lib/services/documentService.ts,
+%% src/lib/uploads.ts, src/lib/repositories/documentsRepository.ts,
+%% src/app/api/documents/[id]/route.ts.
+%% Tests: tests/uploads.test.ts.
+sequenceDiagram
+    autonumber
+    actor F as Fighter
+    participant RT as POST /api/fighter/documents
+    participant RL as rateLimit (upload: 20 per hour per user)
+    participant S as documentService
+    participant U as uploads.ts (readUpload, sniffType)
+    participant PB as Private Blob store
+    participant R as documentsRepository
+    participant DB as PostgreSQL
+
+    F->>RT: multipart (type, file)
+    RT->>RT: assertSameOrigin (403 on a foreign or missing Origin/Referer)
+    RT->>RT: getSession (401 if none)
+    RT->>RL: checkLimit("upload", userId)
+    RL-->>RT: allowed, or 429 with Retry-After
+    RT->>S: uploadFighterDocument(session, request)
+    S->>S: role must be Fighter (403), checked before the body is read
+    S->>U: readUpload(request, document)
+    U->>U: Content-Length over 4 MB + 64 KB slack: 413
+    U->>U: must be multipart/form-data with a non-empty file field
+    U->>U: real size over 4 MB: 413
+    U->>U: sniffType on the first bytes: PDF, JPEG or PNG only (browser type and extension are ignored), else 415
+    U-->>S: bytes, sniffed type, sanitised file name
+    S->>S: type must be Medical, Licence or Other (400)
+    S->>R: countForFighter (10 or more: 409, nothing uploaded)
+    S->>S: pathname = fighter-docs/fighterId/uuid.ext (generated, the client name is never used)
+    S->>PB: put(pathname, bytes, access private, allowOverwrite false)
+    alt store id not set
+        PB-->>S: StoreNotConfigured
+        S-->>RT: 503 File storage is not available right now
+    else store error
+        PB-->>S: error
+        S-->>RT: 502 same message
+    else stored
+        S->>R: createDocument(fighterId, type, fileName, pathname, max 10)
+        R->>DB: BEGIN, lock the fighter row, recount, insert row (fileUrl = pathname, status Pending), COMMIT
+        alt row not saved (limit race or error)
+            S->>PB: del(pathname), best effort
+            S-->>RT: 409 / 404 / mapped error
+        else saved
+            S-->>RT: 201 document
+        end
+    end
+    RT-->>F: JSON data, or error.message
+
+    Note over F,DB: Download
+    F->>RT: GET /api/documents/:id (owner Fighter or Admin)
+    RT->>S: openDocument(session, id)
+    S->>R: getForAccess(id)
+    S->>S: missing, not the owner, any other role: 404 (never 403)
+    S->>PB: get(pathname) with the store credentials
+    S-->>RT: stream
+    RT-->>F: 200 stream with Content-Disposition attachment, X-Content-Type-Options nosniff, Cache-Control private no-store (the blob URL is never sent)

@@ -27,6 +27,10 @@ export const metadata: Metadata = {
     "Elite boxing, MMA and strength training in Bothasig, Cape Town. Championship coaching for every level.",
 };
 
+// The header reads the session and the footer reads opening hours from the
+// database, so no page under this layout can be rendered at build time.
+export const dynamic = "force-dynamic";
+
 export const viewport: Viewport = {
   themeColor: "#000000",
   width: "device-width",

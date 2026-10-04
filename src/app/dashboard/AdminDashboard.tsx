@@ -1,14 +1,42 @@
 import Link from "next/link";
 
 import { logout } from "@/actions/auth";
-import { getClasses, getTimetable } from "@/lib/gym-data";
+import { countUpcoming } from "@/lib/repositories/eventsRepository";
+import { countFighters } from "@/lib/repositories/fightersRepository";
+import { countPending } from "@/lib/repositories/participationsRepository";
+import { getClasses } from "@/lib/repositories/programmesRepository";
+import { getTimetable } from "@/lib/repositories/timetableRepository";
+import { countByRole, getAll } from "@/lib/repositories/usersRepository";
 import { initials, isFull } from "@/lib/types";
 import type { SessionUser } from "@/lib/types";
-import { countByRole, getAll } from "@/lib/users";
 
-export default function AdminDashboard({ session }: { session: SessionUser }) {
-  const timetable = getTimetable();
-  const users = getAll();
+/** How many accounts the dashboard lists; the full list is /admin/members. */
+const DASHBOARD_USERS = 20;
+
+export default async function AdminDashboard({
+  session,
+}: {
+  session: SessionUser;
+}) {
+  const [
+    timetable,
+    users,
+    classes,
+    memberCount,
+    coachCount,
+    fighterCount,
+    upcomingEventCount,
+    pendingOfferCount,
+  ] = await Promise.all([
+    getTimetable(),
+    getAll(DASHBOARD_USERS),
+    getClasses(),
+    countByRole("Member"),
+    countByRole("Coach"),
+    countFighters(),
+    countUpcoming(),
+    countPending(),
+  ]);
 
   return (
     <div className="dash">
@@ -47,15 +75,15 @@ export default function AdminDashboard({ session }: { session: SessionUser }) {
 
           <div className="stats" style={{ marginBottom: 40 }}>
             <div>
-              <b>{countByRole("Member")}</b>
+              <b>{memberCount}</b>
               <span>Members</span>
             </div>
             <div>
-              <b>{countByRole("Coach")}</b>
+              <b>{coachCount}</b>
               <span>Coaches</span>
             </div>
             <div>
-              <b>{getClasses().length}</b>
+              <b>{classes.length}</b>
               <span>Classes</span>
             </div>
             <div>
@@ -68,10 +96,26 @@ export default function AdminDashboard({ session }: { session: SessionUser }) {
             </div>
           </div>
 
+          <div className="stats" style={{ marginBottom: 40 }}>
+            <div>
+              <b>{fighterCount}</b>
+              <span>Fighters</span>
+            </div>
+            <div>
+              <b>{upcomingEventCount}</b>
+              <span>Upcoming events</span>
+            </div>
+            <div>
+              <b>{pendingOfferCount}</b>
+              <span>Pending offers</span>
+            </div>
+          </div>
+
           <div className="section-head">
             <h2>Users</h2>
             <p className="lead">
-              Editing accounts arrives with the Part 2 back end.
+              Manage classes, coaches, members, fighters, events and plans from
+              the <Link href="/admin/classes">admin section</Link>.
             </p>
           </div>
 

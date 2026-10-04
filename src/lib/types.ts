@@ -1,18 +1,34 @@
 /**
  * Domain types for the PFC site.
  *
- * These mirror the shape the database will take in Part 2, so swapping the
- * in-memory data module for Prisma or Drizzle queries means changing
- * `gym-data.ts` and `users.ts` only — nothing in a page or component.
+ * These are the plain shapes the repositories hand to pages and components:
+ * strings, numbers, booleans and arrays only, so every one of them can cross
+ * to a client component. Dates travel as ISO strings.
  */
 
-export type Role = "Member" | "Coach" | "Admin";
+export type Role = "Member" | "Fighter" | "Coach" | "Admin";
 
 export const ROLES = {
   Member: "Member",
+  Fighter: "Fighter",
   Coach: "Coach",
   Admin: "Admin",
 } as const;
+
+/** A fighter is a member with a fight record, so both hold a membership. */
+export function isMemberRole(role: Role): boolean {
+  return role === ROLES.Member || role === ROLES.Fighter;
+}
+
+export type ClassKind = "Group" | "Private" | "Kids" | "Fighters";
+
+export type BookingStatus =
+  | "Pending"
+  | "Confirmed"
+  | "Failed"
+  | "Completed"
+  | "Cancelled"
+  | "NoShow";
 
 /** Monday = 1 … Sunday = 7, matching ISO-8601 so sorting is natural. */
 export type DayKey =
@@ -61,6 +77,8 @@ export interface Coach {
   name: string;
   role: string;
   bio: string;
+  /** A public image from the Blob store, or null for the monogram. */
+  imageUrl: string | null;
 }
 
 /** A monthly membership tier. */
@@ -81,7 +99,24 @@ export interface TimetableSlot {
   className: string;
   coachName: string;
   capacity: number;
+  /** Confirmed bookings for the class's next session. */
   booked: number;
+  coachId?: number;
+  kind?: ClassKind;
+}
+
+/** A member's reservation for one dated session of a class. */
+export interface Booking {
+  id: number;
+  classId: number;
+  className: string;
+  coachName: string;
+  day: DayKey;
+  /** 24-hour "HH:mm". */
+  startsAt: string;
+  /** ISO date, "YYYY-MM-DD". */
+  sessionDate: string;
+  status: BookingStatus;
 }
 
 /** A published member review. */
@@ -102,16 +137,16 @@ export interface OpeningHours {
   closes: number;
 }
 
-/** An account. `passwordHash`/`passwordSalt` never leave the server. */
-export interface AppUser {
+/** An account as the repositories return it: no password hash or salt. */
+export interface UserAccount {
   id: number;
   email: string;
   fullName: string;
+  phone: string | null;
   role: Role;
-  /** Null for coaches and admins — they are staff, not members. */
+  /** Null for staff, and for a member with no current plan. */
   planId: number | null;
-  passwordHash: string;
-  passwordSalt: string;
+  isActive: boolean;
 }
 
 /** What the signed session cookie carries. Deliberately small. */
@@ -122,7 +157,296 @@ export interface SessionUser {
   role: Role;
 }
 
+export type Availability = "Pending" | "Accepted" | "Declined";
+
+export type BoutResult = "Win" | "Loss" | "Draw" | "NoContest";
+
+export const BOUT_RESULTS: readonly BoutResult[] = [
+  "Win",
+  "Loss",
+  "Draw",
+  "NoContest",
+];
+
+export type EventStatus = "Scheduled" | "Completed" | "Cancelled";
+
+/** A member who competes. The id is the member's (and the user's) id. */
+export interface Fighter {
+  id: number;
+  fullName: string;
+  weightClass: string;
+  wins: number;
+  losses: number;
+  draws: number;
+  imageUrl: string | null;
+}
+
+/** A competition the gym's fighters can be offered bouts at. */
+export interface CompetitionEvent {
+  id: number;
+  name: string;
+  /** ISO-8601 UTC instant. Show it with formatEventDate. */
+  eventDate: string;
+  venue: string;
+  description: string;
+  imageUrl: string | null;
+  status: EventStatus;
+}
+
+/** One fighter's bout offer for one event, with the answer and the result. */
+export interface BoutOffer {
+  id: number;
+  fighterId: number;
+  fighterName: string;
+  eventId: number;
+  eventName: string;
+  /** ISO-8601 UTC instant. */
+  eventDate: string;
+  venue: string;
+  eventStatus: EventStatus;
+  availability: Availability;
+  opponentName: string | null;
+  boutWeightClass: string | null;
+  boutNotes: string | null;
+  result: BoutResult | null;
+  resultNotes: string | null;
+  /** ISO-8601 UTC instant. */
+  offeredAt: string;
+  respondedAt: string | null;
+}
+
+/** A fighter's offers, grouped the way the dashboard shows them. */
+export interface FighterOffers {
+  fighter: Fighter;
+  /** Unanswered, for an event that is still to come. */
+  pending: BoutOffer[];
+  /** Accepted, for an event that is still to come. */
+  accepted: BoutOffer[];
+  /** Declined, for an event that is still to come, so it can be changed. */
+  declined: BoutOffer[];
+  /** Every offer whose event has happened or was cancelled, newest first. */
+  past: BoutOffer[];
+}
+
+/**
+ * What every fighter and event service function returns: `status` is the HTTP
+ * status the result maps to, and `error` is safe to show to the user. `field`
+ * names the input the error is about, when there is one, so a form can show
+ * the message next to it.
+ */
+export interface ServiceResult<T> {
+  ok: boolean;
+  status: number;
+  error?: string;
+  field?: string;
+  data?: T;
+}
+
+// ---------------------------------------------------------------- admin
+
+export const CLASS_KINDS: readonly ClassKind[] = [
+  "Group",
+  "Private",
+  "Kids",
+  "Fighters",
+];
+
+/** A scheduled class as the admin screens see it, active or not. */
+export interface AdminClass {
+  id: number;
+  name: string;
+  kind: ClassKind;
+  coachId: number;
+  coachName: string;
+  day: DayKey;
+  /** 24-hour "HH:mm". */
+  startsAt: string;
+  durationMinutes: number;
+  capacity: number;
+  programmeId: number | null;
+  isActive: boolean;
+  /** Confirmed bookings for the next session. */
+  booked: number;
+  /** Confirmed bookings for every session that has not started yet. */
+  futureBookings: number;
+  /** Whether any booking, of any status, was ever made for this class. */
+  hasBookings: boolean;
+}
+
+/** A catalogue programme as the admin screens see it, active or not. */
+export interface AdminProgramme extends GymClass {
+  isActive: boolean;
+}
+
+/** A coach as the admin screens see them, archived or not. */
+export interface AdminCoach {
+  id: number;
+  name: string;
+  email: string;
+  title: string;
+  bio: string;
+  imageUrl: string | null;
+  isActive: boolean;
+  /** Active classes this coach teaches. */
+  activeClasses: number;
+}
+
+export interface AdminPlan extends MembershipPlan {
+  isActive: boolean;
+  /** Active accounts currently on this plan. */
+  activeMembers: number;
+}
+
+/** One row of the admin account list. Never carries a password hash or salt. */
+export interface MemberListItem {
+  id: number;
+  fullName: string;
+  email: string;
+  role: Role;
+  isActive: boolean;
+  planId: number | null;
+}
+
+export interface MemberPage {
+  items: MemberListItem[];
+  total: number;
+  page: number;
+  pageSize: number;
+  pageCount: number;
+}
+
+/** A member who can be promoted, for a dropdown. */
+export interface MemberOption {
+  id: number;
+  fullName: string;
+  email: string;
+}
+
+export interface AdminFighter extends Fighter {
+  /** False while the fighter has bout offers or documents. */
+  canDemote: boolean;
+}
+
+export interface EventDetail {
+  event: CompetitionEvent;
+  offers: BoutOffer[];
+}
+
+export interface AuditLogRow {
+  id: number;
+  /** ISO-8601 UTC instant. */
+  createdAt: string;
+  actorName: string | null;
+  action: string;
+  entity: string;
+  entityId: number | null;
+}
+
+export type DocumentType = "Medical" | "Licence" | "Other";
+
+export const DOCUMENT_TYPES: readonly DocumentType[] = [
+  "Medical",
+  "Licence",
+  "Other",
+];
+
+export type DocumentStatus = "Pending" | "Approved" | "Rejected";
+
+/** A fighter's uploaded document as the fighter sees it. No file location. */
+export interface FighterDocument {
+  id: number;
+  type: DocumentType;
+  fileName: string;
+  status: DocumentStatus;
+  reviewNote: string | null;
+  /** ISO-8601 UTC instant. */
+  uploadedAt: string;
+}
+
+/** A document in the admin review queue. */
+export interface ReviewDocument extends FighterDocument {
+  fighterId: number;
+  fighterName: string;
+  /** ISO-8601 UTC instant, or null while unreviewed. */
+  reviewedAt: string | null;
+}
+
+/** One contact-form message as the admin inbox shows it. */
+export interface Enquiry {
+  id: number;
+  fullName: string;
+  email: string;
+  phone: string | null;
+  message: string;
+  /** ISO-8601 UTC instant. */
+  createdAt: string;
+  /** When the gym's copy was emailed, or null if it was not. */
+  emailSentAt: string | null;
+  /** ISO-8601 UTC instant, or null while unhandled. */
+  handledAt: string | null;
+}
+
+export interface EnquiryPage {
+  items: Enquiry[];
+  total: number;
+  page: number;
+  pageSize: number;
+  pageCount: number;
+}
+
+// ---------------------------------------------------------------- coach
+
+export type AttendanceStatus = "Completed" | "NoShow";
+
+/** One of a coach's classes, with the date its roster link should open. */
+export interface CoachClass extends TimetableSlot {
+  /** ISO date: today when the class runs today, otherwise its next session. */
+  rosterDate: string;
+}
+
+export interface RosterEntry {
+  bookingId: number;
+  memberName: string;
+  status: BookingStatus;
+}
+
+export interface Roster {
+  classId: number;
+  className: string;
+  coachName: string;
+  day: DayKey;
+  startsAt: string;
+  /** ISO date, "YYYY-MM-DD". */
+  sessionDate: string;
+  /** False for a date that is still to come on the gym's calendar. */
+  canMark: boolean;
+  entries: RosterEntry[];
+}
+
+export interface AttendanceStats {
+  attended: number;
+  noShow: number;
+  /** attended / (attended + noShow), or null when nothing is recorded. */
+  rate: number | null;
+}
+
+export interface MemberStats {
+  attendedThisMonth: number;
+  upcoming: number;
+  /** ISO-8601 UTC instant the current plan started, or null with no plan. */
+  planStartedAt: string | null;
+}
+
 // ---------------------------------------------------------------- helpers
+
+/** "3-1-0": wins, losses, draws. */
+export function formatRecord(fighter: {
+  wins: number;
+  losses: number;
+  draws: number;
+}): string {
+  return `${fighter.wins}-${fighter.losses}-${fighter.draws}`;
+}
 
 export function isFull(slot: TimetableSlot): boolean {
   return slot.booked >= slot.capacity;

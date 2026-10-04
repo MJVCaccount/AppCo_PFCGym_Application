@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
 
+import { logger } from "@/lib/logger";
 import { getSlotsFor, getTimetable } from "@/lib/repositories/timetableRepository";
 import { DAY_ORDER, type DayKey } from "@/lib/types";
+
+export const dynamic = "force-dynamic";
 
 const VALID_DAYS: readonly string[] = DAY_ORDER;
 
@@ -17,9 +20,12 @@ export async function GET(request: Request) {
       );
     }
 
-    const slots = day ? getSlotsFor(day as DayKey) : getTimetable();
+    const slots = day
+      ? await getSlotsFor(day as DayKey)
+      : await getTimetable();
     return NextResponse.json({ data: slots });
-  } catch {
+  } catch (e) {
+    logger.error("GET /api/timetable failed", { error: e });
     return NextResponse.json(
       { error: { message: "Could not load the timetable." } },
       { status: 500 },
