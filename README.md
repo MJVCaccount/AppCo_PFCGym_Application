@@ -11,6 +11,15 @@ actions and JSON routes, deployed to Vercel by GitHub Actions.
 
 ---
 
+## Live site
+
+https://pfc-gym.vercel.app
+
+Demo logins for the live site are given to the assessors with the submission
+(they are not published in this repository).
+
+---
+
 ## Running it
 
 Requires Node 20 or newer (what CI uses) and a PostgreSQL database.
@@ -473,4 +482,3 @@ Deployments, pick the last good one and choose "Promote to Production" (or run
 forward and are not undone, which is why the rule above matters: the old code
 has to keep working on the new schema. To undo a schema change, ship a new
 migration that reverses it.
-
