@@ -15,8 +15,16 @@ actions and JSON routes, deployed to Vercel by GitHub Actions.
 
 https://pfc-gym.vercel.app
 
-Demo logins for the live site are given to the assessors with the submission
-(they are not published in this repository).
+## Demo Logins
+
+- Admin: admin@pfc.co.za / PfcAdmin-Cobalt-7391-Ring
+- Member: member@pfc.co.za / PfcDemo-Harbor-4826-Glove
+- Fighter: fighter@pfc.co.za / PfcDemo-Harbor-4826-Glove
+- Coach: marcus@pfc.co.za or sofia@pfc.co.za / PfcDemo-Harbor-4826-Glove
+
+## Presentation Youtube Link
+
+https://youtu.be/XglV1hx25q4?si=wn8EiDb5nlbrW2Yd
 
 ---
 
