@@ -2,22 +2,40 @@ import Link from "next/link";
 
 import { logout } from "@/actions/auth";
 import { cancelMembership } from "@/actions/gym";
-import { getNextAvailableSlot, getPlan } from "@/lib/gym-data";
+import { formatGymDate } from "@/lib/dates";
+import { getPlan } from "@/lib/repositories/plansRepository";
+import { memberStats } from "@/lib/services/coachService";
+import { getNextAvailableSlot } from "@/lib/repositories/timetableRepository";
+import { findById } from "@/lib/repositories/usersRepository";
 import { DAY_NAMES, formatPrice, initials } from "@/lib/types";
 import type { SessionUser } from "@/lib/types";
-import { findById } from "@/lib/users";
 
-export default function MemberDashboard({
+/**
+ * `roleLabel` and `children` exist for the fighter dashboard, which is this
+ * page with the fighter's own sections above the membership ones.
+ */
+export default async function MemberDashboard({
   session,
+  roleLabel = "Member",
+  children,
 }: {
   session: SessionUser;
+  roleLabel?: string;
+  children?: React.ReactNode;
 }) {
-  const user = findById(session.id);
-  const plan = user?.planId != null ? getPlan(user.planId) : undefined;
-  const next = getNextAvailableSlot();
+  const [user, next, stats] = await Promise.all([
+    findById(session.id),
+    getNextAvailableSlot(),
+    memberStats(session, session.id),
+  ]);
+  const plan =
+    user?.planId != null
+      ? await getPlan(user.planId, { includeInactive: true })
+      : undefined;
 
-  const nextPayment = new Date();
-  nextPayment.setMonth(nextPayment.getMonth() + 1, 1);
+  const attended = stats.data?.attendedThisMonth ?? 0;
+  const upcoming = stats.data?.upcoming ?? 0;
+  const planStarted = stats.data?.planStartedAt;
 
   return (
     <div className="dash">
@@ -35,13 +53,15 @@ export default function MemberDashboard({
           </span>
           <span>
             <b>{session.fullName}</b>
-            <span>Member</span>
+            <span>{roleLabel}</span>
           </span>
         </div>
       </aside>
 
       <div className="dash__main">
         <div className="wrap">
+          {children}
+
           <div className="section-head section-head--row">
             <div>
               <p className="eyebrow">Account</p>
@@ -114,6 +134,13 @@ export default function MemberDashboard({
                 >
                   View timetable
                 </Link>
+                <Link
+                  className="btn btn--grey btn--block btn--sm"
+                  href="/bookings"
+                  style={{ marginTop: 10 }}
+                >
+                  My bookings
+                </Link>
               </article>
 
               <article className="dash-card">
@@ -126,9 +153,13 @@ export default function MemberDashboard({
                     marginTop: 4,
                   }}
                 >
-                  12
+                  {attended}
                 </p>
-                <p style={{ color: "var(--mut)" }}>classes attended</p>
+                <p style={{ color: "var(--mut)" }}>
+                  {attended === 1 ? "class attended" : "classes attended"}
+                  {" · "}
+                  {upcoming} upcoming
+                </p>
               </article>
 
               <article className="dash-card">
@@ -136,12 +167,8 @@ export default function MemberDashboard({
                 {plan ? (
                   <>
                     <p style={{ color: "var(--mut)", marginTop: 6 }}>
-                      Next payment{" "}
-                      {nextPayment.toLocaleDateString("en-ZA", {
-                        day: "numeric",
-                        month: "long",
-                        year: "numeric",
-                      })}
+                      R{formatPrice(plan.pricePerMonth)} per month
+                      {planStarted ? `, since ${formatGymDate(planStarted)}` : ""}
                     </p>
                     <form action={cancelMembership}>
                       <button

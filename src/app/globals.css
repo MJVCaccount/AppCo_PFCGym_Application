@@ -17,7 +17,7 @@
   --red-deep:#2A0505;
   --txt:#FFFFFF;
   --mut:#9C9C9C;
-  --mut-2:#6E6E6E;
+  --mut-2:#8C8C8C;
   --ok:#2ECC71;
 
   --r-card:14px;
@@ -302,6 +302,7 @@ h3{font-size:var(--fs-h3);letter-spacing:-.01em}
 .slot__info b{display:block;font-size:14px;font-weight:800;text-transform:uppercase}
 .slot__info span{font-size:12px;color:var(--mut)}
 .slot__full{opacity:.45;border-left-color:#444}
+.slot__actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px}
 
 /* ---------- 12. Testimonials + gallery ---------- */
 .quote{background:var(--surface);border-radius:var(--r-card);padding:20px}
@@ -341,8 +342,15 @@ h3{font-size:var(--fs-h3);letter-spacing:-.01em}
   transition:border-color .18s var(--ease);
 }
 .field textarea{min-height:130px;resize:vertical}
-.field input::placeholder,.field textarea::placeholder{color:#6A6A6A}
+.field input::placeholder,.field textarea::placeholder{color:#8C8C8C}
 .field input:focus,.field textarea:focus,.field select:focus{border-color:var(--red);outline:none}
+/* Keyboard focus ring: 2px red, 2px clear of the field so it is not clipped.
+   Red #FF0000 against the field (#252525) is 3.83:1, against the page
+   (#000000) 5.25:1 and against a card (#171717) 4.48:1; all above the 3:1
+   that WCAG 1.4.11 asks of a focus indicator. */
+.field input:focus-visible,.field textarea:focus-visible,.field select:focus-visible{
+  outline:2px solid var(--red);outline-offset:2px;
+}
 .field input[aria-invalid="true"],.field textarea[aria-invalid="true"]{border-color:#FF4D4D}
 .field .error{display:block;margin-top:6px;font-size:11px;color:#FF6B6B;min-height:14px}
 .field__row{display:flex;gap:10px;align-items:center}
@@ -539,6 +547,10 @@ h3{font-size:var(--fs-h3);letter-spacing:-.01em}
 .header__actions form,
 .dash__side form{display:inline-flex}
 
+/* an outline button was always an <a>; as a <button> it would otherwise take
+   the browser's light default background and hide its white label */
+button.btn--line{background:transparent}
+
 .day{
   display:inline-flex;align-items:center;text-decoration:none;
   min-height:44px;                       /* tap target, now that it is an <a> */
@@ -557,6 +569,17 @@ h3{font-size:var(--fs-h3);letter-spacing:-.01em}
 
 .gallery a{display:contents}
 
+/* ---------- 23. Fighter dashboard ---------- */
+.fighter-record{font-size:40px;font-weight:900;letter-spacing:-.03em;margin-top:10px}
+
+.offer h3{font-size:20px;margin-top:4px}
+.offer__venue{color:var(--mut);font-size:13px;margin-top:6px}
+.offer__facts{display:grid;grid-template-columns:auto 1fr;gap:8px 16px;margin-top:16px;font-size:13px}
+.offer__facts dt{font-size:9px;letter-spacing:.12em;color:var(--mut-2);text-transform:uppercase;padding-top:3px}
+.offer__actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:18px}
+.offer__actions form{flex:1 1 140px}
+.offer__actions .btn{min-height:44px}   /* tap target */
+
 /* A <button> carries the browser's own background and font; the pill and
    burger styles assume neither, so reset them where a button wears one. */
 button.pill-link,
@@ -565,3 +588,74 @@ button.day{
   font-size:10px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;
 }
 button.pill-link:hover{background:#fff;color:#000}
+
+/* ---------- 24. Admin and coach screens ---------- */
+.admin-nav{display:flex;flex-wrap:wrap;gap:8px}
+.admin-top{display:flex;justify-content:flex-end;margin-bottom:8px}
+.admin-section{margin-bottom:48px}
+.admin-section > .alert{margin-bottom:16px}
+.admin-section h3{font-size:18px;margin-bottom:14px}
+.admin-card{
+  background:var(--surface);border:1px solid var(--line);
+  border-radius:var(--r-card);padding:20px;margin-bottom:20px;
+}
+.admin-toolbar{display:flex;flex-wrap:wrap;align-items:flex-end;gap:12px;margin-bottom:16px}
+.admin-toolbar .field{flex:1 1 200px}
+.admin-toolbar .btn{flex:none}
+.admin-filters{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px}
+.table-wrap{overflow-x:auto;margin-bottom:16px;border:1px solid var(--line);border-radius:var(--r-card)}
+.admin-table{width:100%;border-collapse:collapse;font-size:13px;min-width:640px}
+.admin-table th{
+  text-align:left;padding:12px 14px;font-size:9px;letter-spacing:.12em;
+  text-transform:uppercase;color:var(--mut-2);border-bottom:1px solid var(--line);white-space:nowrap;
+}
+.admin-table td{padding:12px 14px;border-bottom:1px solid #1C1C1C;vertical-align:middle}
+.admin-table tr:last-child td{border-bottom:0}
+.admin-table .muted{color:var(--mut);font-size:12px}
+.admin-actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.admin-actions form{display:inline-flex;gap:8px;align-items:center}
+.admin-actions select{min-height:40px;padding:0 10px;background:var(--surface-3);border:1.5px solid transparent;border-radius:9px}
+.admin-confirm{
+  display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;
+  background:var(--red-deep);border:1px solid var(--red);border-radius:12px;padding:14px 16px;margin-bottom:16px;
+}
+.admin-confirm p{flex:1 1 260px;font-size:13px}
+.admin-pager{display:flex;align-items:center;gap:12px;justify-content:space-between;flex-wrap:wrap}
+.check{display:flex;align-items:center;gap:10px;font-size:13px;min-height:44px}
+.check input{width:20px;height:20px;min-height:0;accent-color:var(--red)}
+.btn[disabled]{opacity:.45;cursor:not-allowed}
+.tag--ok{border-color:rgba(46,204,113,.45);color:#8BE6B4}
+.tag--off{border-color:#444;color:var(--mut-2)}
+.tag--red{border-color:rgba(255,0,0,.45);color:#FF9E9E}
+.help{font-size:12px;color:var(--mut);margin-top:6px}
+.roster-row .btn{min-height:44px}
+@media (min-width:1024px){
+  .admin-nav{flex-direction:column}
+  .admin-nav .btn{justify-content:flex-start}
+}
+/* a wide table must scroll inside its wrapper, not stretch the grid column */
+.dash__main{min-width:0}
+
+/* ---------- 25. Tap targets ----------
+   Minimum sizes only: no font size, colour or spacing between neighbours
+   changes. Below 1024px every interactive control is at least 44px tall;
+   from 1024px nothing that stands alone is under 24px. */
+.header__login,.nav a,.footer details li a,.footer__legal a,.footer .contact-list a,
+.field a[href="/forgot-password"]{
+  display:inline-flex;align-items:center;min-height:24px;
+}
+.toggle-pw{min-height:24px}
+@media (max-width:1023px){
+  .header__login,.footer details li a,.footer__legal a,.footer .contact-list a,
+  .field a[href="/forgot-password"]{min-height:44px}
+  .btn--sm{min-height:44px}
+  .pill-link,button.pill-link{min-height:44px}
+  .toggle-pw{min-height:44px}
+  /* the logo keeps its 64x32 outlined box; the link around it grows to 44px */
+  .logo{position:relative;height:44px;border:0;border-radius:0}
+  .logo::before{
+    content:"";position:absolute;inset:6px 0;
+    border:1.5px solid var(--red);border-radius:4px;
+  }
+  .logo span{position:relative}
+}

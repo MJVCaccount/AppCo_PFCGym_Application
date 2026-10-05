@@ -4,7 +4,8 @@ import Link from "next/link";
 import { book } from "@/actions/gym";
 import Alert from "@/components/Alert";
 import StickyCta from "@/components/StickyCta";
-import { getSlotsFor } from "@/lib/gym-data";
+import { currentDayAndHour } from "@/lib/dates";
+import { getSlotsFor } from "@/lib/repositories/timetableRepository";
 import { getSession } from "@/lib/session";
 import {
   DAY_NAMES,
@@ -12,9 +13,9 @@ import {
   type DayKey,
   firstParam,
   isFull,
+  isMemberRole,
   type SearchParams,
   spacesLeft,
-  todayKey,
 } from "@/lib/types";
 
 export const metadata: Metadata = {
@@ -42,10 +43,17 @@ export default async function TimetablePage({
   // The day comes from the URL, so a tab is a real link: shareable, works with
   // the back button, and works with JavaScript off. Next routes it client-side,
   // so switching still feels instant.
-  const selected: DayKey = isDayKey(requestedDay) ? requestedDay : todayKey();
+  const now = new Date();
+  const selected: DayKey = isDayKey(requestedDay)
+    ? requestedDay
+    : currentDayAndHour(now).day;
 
-  const slots = getSlotsFor(selected);
-  const session = await getSession();
+  const [slots, session] = await Promise.all([
+    getSlotsFor(selected, now),
+    getSession(),
+  ]);
+  // Coaches and admins cannot book, so they are not offered the button.
+  const isStaff = session !== null && !isMemberRole(session.role);
 
   return (
     <>
@@ -104,7 +112,7 @@ export default async function TimetablePage({
 
                   {full ? (
                     <span className="tag">Full</span>
-                  ) : (
+                  ) : isStaff ? null : (
                     <form action={book}>
                       <input type="hidden" name="slotId" value={slot.id} />
                       <input type="hidden" name="day" value={selected} />

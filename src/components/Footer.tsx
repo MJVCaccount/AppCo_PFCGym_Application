@@ -1,6 +1,7 @@
 import Link from "next/link";
 
-import { getOpeningHours } from "@/lib/gym-data";
+import { gymDateAndTime } from "@/lib/dates";
+import { getOpeningHours } from "@/lib/repositories/hoursRepository";
 import { DAY_NAMES, formatHours } from "@/lib/types";
 
 const NAV = [
@@ -9,11 +10,12 @@ const NAV = [
   { href: "/coaches", label: "Coaches" },
   { href: "/memberships", label: "Memberships" },
   { href: "/timetable", label: "Timetable" },
+  { href: "/events", label: "Events" },
   { href: "/contact", label: "Contact" },
 ];
 
-export default function Footer() {
-  const hours = getOpeningHours();
+export default async function Footer() {
+  const hours = await getOpeningHours();
 
   return (
     <footer className="footer">
@@ -86,7 +88,7 @@ export default function Footer() {
 
         <div className="footer__legal">
           <p>
-            &copy; {new Date().getFullYear()} Professional Fighting
+            &copy; {gymDateAndTime(new Date()).date.getUTCFullYear()} Professional Fighting
             Championship. All rights reserved.
           </p>
           <nav aria-label="Legal">

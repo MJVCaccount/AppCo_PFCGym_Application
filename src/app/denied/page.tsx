@@ -3,6 +3,8 @@ import Link from "next/link";
 
 export const metadata: Metadata = { title: "Access denied" };
 
+export const dynamic = "force-dynamic";
+
 export default function DeniedPage() {
   return (
     <section className="auth">

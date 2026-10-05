@@ -5,6 +5,7 @@ import { firstParam, type SearchParams } from "@/lib/types";
 import Alert from "@/components/Alert";
 import AdminDashboard from "./AdminDashboard";
 import CoachDashboard from "./CoachDashboard";
+import FighterDashboard from "./FighterDashboard";
 import MemberDashboard from "./MemberDashboard";
 
 export const metadata: Metadata = {
@@ -15,7 +16,7 @@ export const metadata: Metadata = {
 export const dynamic = "force-dynamic";
 
 /**
- * One URL for all three roles. The session's role decides which dashboard
+ * One URL for every role. The session's role decides which dashboard
  * renders, so a coach visiting /dashboard lands on the coach view without a
  * separate route to guess at.
  */
@@ -27,6 +28,7 @@ export default async function DashboardPage({
   const params = await searchParams;
   const notice = firstParam(params.notice);
   const welcome = firstParam(params.welcome);
+  const error = firstParam(params.error);
   const session = await requireSession("/dashboard");
 
   const banner = welcome
@@ -38,6 +40,8 @@ export default async function DashboardPage({
       <AdminDashboard session={session} />
     ) : session.role === "Coach" ? (
       <CoachDashboard session={session} />
+    ) : session.role === "Fighter" ? (
+      <FighterDashboard session={session} />
     ) : (
       <MemberDashboard session={session} />
     );
@@ -47,6 +51,11 @@ export default async function DashboardPage({
       {banner && (
         <div className="wrap" style={{ paddingTop: 20 }}>
           <Alert kind="ok">{banner}</Alert>
+        </div>
+      )}
+      {error && (
+        <div className="wrap" style={{ paddingTop: 20 }}>
+          <Alert kind="err">{error}</Alert>
         </div>
       )}
       {board}

@@ -1,20 +1,25 @@
 import Link from "next/link";
 
 import { logout } from "@/actions/auth";
-import { getSlotsForCoach } from "@/lib/gym-data";
-import {
-  DAY_NAMES,
-  initials,
-  isFull,
-  spacesLeft,
-  todayKey,
-} from "@/lib/types";
+import Alert from "@/components/Alert";
+import { coachStats, getMyClasses } from "@/lib/services/coachService";
+import { DAY_NAMES, initials, isFull } from "@/lib/types";
 import type { SessionUser } from "@/lib/types";
 
-export default function CoachDashboard({ session }: { session: SessionUser }) {
-  const week = getSlotsForCoach(session.fullName);
-  const today = week.filter((slot) => slot.day === todayKey());
+export default async function CoachDashboard({
+  session,
+}: {
+  session: SessionUser;
+}) {
+  const now = new Date();
+  const [classes, stats] = await Promise.all([
+    getMyClasses(session, now),
+    coachStats(session, now),
+  ]);
+
+  const week = classes.data ?? [];
   const totalBooked = week.reduce((sum, slot) => sum + slot.booked, 0);
+  const rate = stats.data?.rate ?? null;
 
   return (
     <div className="dash">
@@ -41,7 +46,7 @@ export default function CoachDashboard({ session }: { session: SessionUser }) {
         <div className="wrap">
           <div className="section-head section-head--row">
             <div>
-              <p className="eyebrow">Today</p>
+              <p className="eyebrow">Coach</p>
               <h2>Your classes</h2>
             </div>
             <form action={logout}>
@@ -51,51 +56,42 @@ export default function CoachDashboard({ session }: { session: SessionUser }) {
             </form>
           </div>
 
-          {today.length === 0 ? (
-            <p className="lead">Nothing scheduled today.</p>
-          ) : (
-            today.map((slot) => (
-              <div className="slot" key={slot.id}>
-                <p className="slot__time">
-                  <b>{slot.startsAt}</b>
-                  <span>{slot.durationMinutes} min</span>
-                </p>
-                <p className="slot__info">
-                  <b>{slot.className}</b>
-                  <span>
-                    {slot.booked} of {slot.capacity} booked
-                  </span>
-                </p>
-                <span className="tag">
-                  {isFull(slot) ? "Full" : `${spacesLeft(slot)} left`}
-                </span>
-              </div>
-            ))
+          {!classes.ok && (
+            <Alert kind="err">{classes.error ?? "Your classes could not be loaded."}</Alert>
           )}
 
-          <div className="stats" style={{ margin: "40px 0" }}>
+          <div className="stats" style={{ margin: "0 0 40px" }}>
             <div>
               <b>{week.length}</b>
-              <span>Classes this week</span>
+              <span>Classes scheduled</span>
             </div>
             <div>
               <b>{totalBooked}</b>
-              <span>Athletes booked</span>
+              <span>Booked, next sessions</span>
             </div>
             <div>
-              <b>{week.filter(isFull).length}</b>
-              <span>Fully booked</span>
+              <b>{rate === null ? "—" : `${Math.round(rate * 100)}%`}</b>
+              <span>
+                {rate === null
+                  ? "No attendance recorded yet"
+                  : `Attendance, last 30 days (${stats.data?.attended} attended, ${stats.data?.noShow} no-show)`}
+              </span>
             </div>
           </div>
 
           <div className="section-head">
             <h2>Your week</h2>
+            <p className="lead">Open a class to see who is booked and record attendance.</p>
           </div>
+
+          {week.length === 0 && (
+            <p className="lead">You have no classes scheduled yet. An administrator adds them.</p>
+          )}
 
           {week.map((slot) => (
             <div
               className={`slot${isFull(slot) ? " slot__full" : ""}`}
-              key={`week-${slot.id}`}
+              key={slot.id}
             >
               <p className="slot__time">
                 <b>{slot.startsAt}</b>
@@ -104,9 +100,16 @@ export default function CoachDashboard({ session }: { session: SessionUser }) {
               <p className="slot__info">
                 <b>{slot.className}</b>
                 <span>
-                  {slot.booked} of {slot.capacity} booked
+                  {slot.booked} of {slot.capacity} booked · {slot.durationMinutes} min
                 </span>
               </p>
+              <Link
+                className="btn btn--grey btn--sm"
+                href={`/coach/classes/${slot.id}?date=${slot.rosterDate}`}
+                aria-label={`Roster for ${slot.className} on ${DAY_NAMES[slot.day]} at ${slot.startsAt}`}
+              >
+                Roster
+              </Link>
             </div>
           ))}
         </div>

@@ -8,6 +8,8 @@ export const metadata: Metadata = {
     "Get in touch with PFC in Bothasig, Cape Town. Book a free trial session.",
 };
 
+export const dynamic = "force-dynamic";
+
 export default function ContactPage() {
   return (
     <section className="section">

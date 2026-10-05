@@ -1,7 +1,8 @@
 import { logout } from "@/actions/auth";
-import { getHoursFor } from "@/lib/gym-data";
+import { currentDayAndHour } from "@/lib/dates";
+import { getHoursFor } from "@/lib/repositories/hoursRepository";
 import { getSession } from "@/lib/session";
-import { formatHours, todayKey } from "@/lib/types";
+import { formatHours } from "@/lib/types";
 
 import SiteNav from "./SiteNav";
 
@@ -10,8 +11,10 @@ import SiteNav from "./SiteNav";
  * client component that owns the menu's open state.
  */
 export default async function Header() {
-  const session = await getSession();
-  const hours = getHoursFor(todayKey());
+  const [session, hours] = await Promise.all([
+    getSession(),
+    getHoursFor(currentDayAndHour(new Date()).day),
+  ]);
 
   return (
     <SiteNav

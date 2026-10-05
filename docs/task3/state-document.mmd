@@ -1,0 +1,20 @@
+%% Source: prisma/schema.prisma (DocumentStatus), src/lib/repositories/documentsRepository.ts
+%% (createDocument, deleteOwnDocument, reviewDocument), src/lib/services/documentService.ts.
+%% reviewDocument refuses a decision equal to the current status (409, so the fighter is not emailed twice);
+%% it does not forbid Approved -> Rejected or Rejected -> Approved.
+%% Tests: tests/uploads.test.ts ("reviewing is admin only...", "a rejected document can be deleted by its owner",
+%% "an approved document cannot be deleted").
+stateDiagram-v2
+    [*] --> Pending : fighter uploads (max 10 per fighter)
+    Pending --> Approved : admin approves
+    Pending --> Rejected : admin rejects (note required)
+    Rejected --> Approved : admin approves later
+    Approved --> Rejected : admin changes the decision (note required)
+    Pending --> Deleted : owner deletes (row removed, blob deleted)
+    Rejected --> Deleted : owner deletes
+    Approved --> Approved : owner cannot delete (409)
+    Deleted --> [*]
+    note right of Deleted
+        Deleted is not a stored value: the row is gone.
+        If the blob delete fails it is logged and the row stays removed.
+    end note

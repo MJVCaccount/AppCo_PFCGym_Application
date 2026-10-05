@@ -1,0 +1,21 @@
+%% Source: prisma/schema.prisma (Availability, EventParticipation), src/lib/repositories/participationsRepository.ts
+%% (isOpen, setAvailability), src/lib/services/eventService.ts (offerBout, respondToOffer, recordResult).
+%% An answer can be changed until the event is no longer open: status Scheduled AND eventDate in the future.
+%% There is no way back to Pending. Tests: tests/fighters.test.ts ("the owner can accept, then change to decline",
+%% "after the event date, or once it is cancelled, the answer is locked: 409"), tests/flows.test.ts.
+stateDiagram-v2
+    [*] --> Pending : admin offers a bout (event open; one offer per fighter and event)
+    Pending --> Accepted : fighter accepts
+    Pending --> Declined : fighter declines
+    Accepted --> Declined : fighter changes the answer
+    Declined --> Accepted : fighter changes the answer
+    Accepted --> Locked : event date passes or event cancelled (answer frozen)
+    Declined --> Locked : event date passes or event cancelled
+    Pending --> Locked : event date passes or event cancelled
+    Locked --> Result : admin records Win, Loss, Draw or NoContest (only Accepted offers, only after the event date, not for a cancelled event)
+    Result --> Result : result changed or cleared (fighter record counters follow)
+    note right of Locked
+        Locked is not a stored value. It is the rule
+        "event is not Scheduled or its date has passed";
+        the stored field stays Pending, Accepted or Declined.
+    end note

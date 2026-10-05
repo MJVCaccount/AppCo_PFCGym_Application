@@ -5,29 +5,43 @@ import ClassCard from "@/components/ClassCard";
 import CoachCard from "@/components/CoachCard";
 import PlanCard from "@/components/PlanCard";
 import StickyCta from "@/components/StickyCta";
+import { currentDayAndHour } from "@/lib/dates";
+import { getCoaches } from "@/lib/repositories/coachesRepository";
+import { getHoursFor, isOpenAt } from "@/lib/repositories/hoursRepository";
 import {
   getCheapestPlanPrice,
-  getClasses,
-  getCoaches,
-  getHoursFor,
   getPlans,
-  getReviews,
-  getTimetable,
-  isOpenAt,
-} from "@/lib/gym-data";
-import { formatHours, formatPrice, initials, timeAgo, todayKey } from "@/lib/types";
+} from "@/lib/repositories/plansRepository";
+import { getClasses } from "@/lib/repositories/programmesRepository";
+import { getReviews } from "@/lib/repositories/reviewsRepository";
+import { getTimetable } from "@/lib/repositories/timetableRepository";
+import { formatHours, formatPrice, initials, timeAgo } from "@/lib/types";
 
 // The hero shows whether the gym is open right now, so this page cannot be
 // baked at build time — it renders per request.
 export const dynamic = "force-dynamic";
 
-export default function HomePage() {
-  const classes = getClasses();
-  const coaches = getCoaches();
-  const plans = getPlans();
-  const reviews = getReviews();
-  const hours = getHoursFor(todayKey());
-  const open = isOpenAt();
+export default async function HomePage() {
+  const now = new Date();
+  const [
+    classes,
+    coaches,
+    plans,
+    reviews,
+    hours,
+    open,
+    cheapestPrice,
+    timetable,
+  ] = await Promise.all([
+    getClasses(),
+    getCoaches(),
+    getPlans(),
+    getReviews(),
+    getHoursFor(currentDayAndHour(now).day),
+    isOpenAt(now),
+    getCheapestPlanPrice(),
+    getTimetable(now),
+  ]);
 
   return (
     <>
@@ -78,7 +92,7 @@ export default function HomePage() {
             </div>
             <div>
               <dt>From</dt>
-              <dd className="price">R{formatPrice(getCheapestPlanPrice())}/mo</dd>
+              <dd className="price">R{formatPrice(cheapestPrice)}/mo</dd>
             </div>
           </dl>
         </div>
@@ -146,7 +160,7 @@ export default function HomePage() {
           <span>Expert coaches</span>
         </div>
         <div>
-          <b>{getTimetable().length}+</b>
+          <b>{timetable.length}+</b>
           <span>Weekly classes</span>
         </div>
         <div>

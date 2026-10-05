@@ -1,0 +1,186 @@
+%% Source of truth: prisma/schema.prisma (migrations in prisma/migrations/).
+%% Enums (prisma/schema.prisma:11-73):
+%%   Role            Member | Fighter | Coach | Admin
+%%   Day             mon | tue | wed | thu | fri | sat | sun
+%%   ClassKind       Group | Private | Kids | Fighters
+%%   BookingStatus   Pending | Confirmed | Failed | Completed | Cancelled | NoShow
+%%   Availability    Pending | Accepted | Declined
+%%   BoutResult      Win | Loss | Draw | NoContest
+%%   EventStatus     Scheduled | Completed | Cancelled
+%%   DocumentType    Medical | Licence | Other
+%%   DocumentStatus  Pending | Approved | Rejected
+%% CHECK constraints (prisma/migrations/20261004015208_integrity_checks) are listed in erd-notes.md.
+erDiagram
+    User ||--o| Member : "is (shared PK)"
+    User ||--o| Coach : "is (shared PK)"
+    User ||--o| Admin : "is (shared PK)"
+    User ||--o{ PasswordResetToken : "has"
+    User |o--o{ AuditLog : "acts (SetNull)"
+    MembershipPlan |o--o{ Member : "plan (SetNull)"
+    Member ||--o| Fighter : "is (shared PK)"
+    Member ||--o{ Booking : "books (Restrict)"
+    Coach ||--o{ GymClass : "teaches (Restrict)"
+    ClassProgramme |o--o{ GymClass : "programme (SetNull)"
+    GymClass ||--o{ Booking : "booked in (Restrict)"
+    Fighter ||--o{ EventParticipation : "offered"
+    CompetitionEvent ||--o{ EventParticipation : "has"
+    Fighter ||--o{ FighterDocument : "uploads"
+
+    User {
+        Int id PK
+        String email UK
+        String fullName
+        String phone "nullable"
+        Role role "index"
+        String passwordHash "scrypt, hex"
+        String passwordSalt "hex"
+        Boolean isActive "default true"
+        Int sessionVersion "default 0"
+        DateTime createdAt
+        DateTime updatedAt
+    }
+    Member {
+        Int membershipId PK, FK "User.id"
+        Int planId FK "nullable"
+        DateTime planChangedAt "nullable"
+        DateTime cancelledAt "nullable"
+    }
+    Fighter {
+        Int fighterId PK, FK "Member.membershipId"
+        String weightClass
+        Int wins "default 0"
+        Int losses "default 0"
+        Int draws "default 0"
+        String imageUrl "nullable"
+    }
+    Coach {
+        Int coachId PK, FK "User.id"
+        String title
+        String bio
+        String imageUrl "nullable"
+        Boolean isActive "default true"
+    }
+    Admin {
+        Int adminId PK, FK "User.id"
+    }
+    MembershipPlan {
+        Int id PK
+        Int pricePerMonth "whole rand"
+        Boolean isMostPopular
+        String[] features
+        Int sortOrder
+        Boolean isActive
+    }
+    ClassProgramme {
+        Int id PK
+        String name
+        String slug UK
+        String description
+        String level
+        Int durationMinutes
+        Boolean isActive
+    }
+    GymClass {
+        Int id PK
+        Int programmeId FK "nullable"
+        String name
+        ClassKind kind "default Group"
+        Int coachId FK
+        Day day
+        String startsAt "VarChar(5) HH:mm"
+        Int durationMinutes
+        Int capacity
+        Boolean isActive
+        DateTime createdAt
+        DateTime updatedAt
+    }
+    Booking {
+        Int id PK
+        Int memberId FK
+        Int gymClassId FK
+        Date sessionDate "db.Date"
+        BookingStatus status "default Pending"
+        String failureReason "nullable"
+        DateTime createdAt
+        DateTime updatedAt
+        DateTime cancelledAt "nullable"
+        DateTime completedAt "nullable"
+    }
+    CompetitionEvent {
+        Int id PK
+        String name
+        DateTime eventDate "index"
+        String venue
+        String description
+        String imageUrl "nullable"
+        EventStatus status "default Scheduled"
+        DateTime createdAt
+    }
+    EventParticipation {
+        Int id PK
+        Int fighterId FK
+        Int eventId FK "index"
+        Availability availability "default Pending"
+        String opponentName "nullable"
+        String boutWeightClass "nullable"
+        String boutNotes "nullable"
+        BoutResult result "nullable"
+        String resultNotes "nullable"
+        DateTime offeredAt
+        DateTime respondedAt "nullable"
+    }
+    FighterDocument {
+        Int id PK
+        Int fighterId FK "index"
+        DocumentType type
+        String fileName "sanitised label"
+        String fileUrl "private Blob PATHNAME, not a URL"
+        DocumentStatus status "default Pending"
+        String reviewNote "nullable"
+        DateTime reviewedAt "nullable"
+        DateTime uploadedAt
+    }
+    ContactEnquiry {
+        Int id PK
+        String fullName
+        String email
+        String phone "nullable"
+        String message
+        DateTime emailSentAt "nullable"
+        DateTime handledAt "nullable"
+        DateTime createdAt
+    }
+    PasswordResetToken {
+        Int id PK
+        Int userId FK "index"
+        String tokenHash UK "sha256 hex"
+        DateTime expiresAt
+        DateTime usedAt "nullable"
+        DateTime createdAt
+    }
+    AuditLog {
+        Int id PK
+        Int actorId FK "nullable"
+        String action
+        String entity
+        Int entityId "nullable; index with entity"
+        Json detail "nullable"
+        DateTime createdAt
+    }
+    Review {
+        Int id PK
+        String memberName
+        String body
+        Int rating "CHECK 1..5"
+        Date postedOn
+    }
+    OpeningHours {
+        Day day PK
+        Int opens "CHECK 0..23"
+        Int closes "CHECK 1..24, > opens"
+    }
+    RateLimitBucket {
+        String key PK "policy:sha256(identifier)"
+        Int count
+        DateTime resetAt "index"
+    }
