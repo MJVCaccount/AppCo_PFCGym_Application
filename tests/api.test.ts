@@ -303,11 +303,21 @@ async function main() {
 
     const soonestFirst = upcoming.map(when);
     assert.deepEqual(soonestFirst, [...soonestFirst].sort(), "upcoming ascending");
-    // Both Monday classes share a date, so the start time decides.
-    assert.ok(
-      upcoming.findIndex((b) => b.className === "Elite Boxing") <
-        upcoming.findIndex((b) => b.className === "Submission Grappling"),
+    // Elite Boxing (Mon 06:30) and Submission Grappling (Mon 19:00) usually
+    // share a date, so the start time decides. On a Monday between those two
+    // times, boxing has already started and rolls to next week while
+    // grappling is still today, so grappling comes first. Either way the order
+    // must follow the real date and time.
+    const boxingAt = upcoming.findIndex((b) => b.className === "Elite Boxing");
+    const grapplingAt = upcoming.findIndex(
+      (b) => b.className === "Submission Grappling",
     );
+    const boxingFirst =
+      when(upcoming[boxingAt]) < when(upcoming[grapplingAt]);
+    assert.equal(boxingAt < grapplingAt, boxingFirst, "Monday classes in time order");
+    if (upcoming[boxingAt].sessionDate === upcoming[grapplingAt].sessionDate) {
+      assert.ok(boxingFirst, "same date: the earlier start time comes first");
+    }
 
     // Seen from after they have all happened, the same bookings are past.
     const later = new Date(now.getTime() + 8 * 24 * 60 * 60 * 1000);
