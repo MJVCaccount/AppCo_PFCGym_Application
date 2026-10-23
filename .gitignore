@@ -30,3 +30,6 @@ yarn-error.log*
 *.tsbuildinfo
 .vercel
 .env*
+
+# Visual Studio IDE state
+.vs/
