@@ -6,6 +6,8 @@ import { useState } from "react";
 import { formatEventDate } from "@/lib/dates";
 import type { FighterDocument } from "@/lib/types";
 
+import Alert from "./Alert";
+
 const STATUS_TAG = {
   Pending: "",
   Approved: "tag--ok",
@@ -53,9 +55,11 @@ export default function DocumentList({
 
   return (
     <div>
-      <span className="error" role="alert">
-        {error}
-      </span>
+      {/* This failure belongs to the list, not to one control, so it is an
+          alert rather than a field error: a bare .error span styled for a
+          field sat here with no control referencing it. Alert mounts only
+          when there is something to say, and role="alert" announces it. */}
+      {error && <Alert kind="err">{error}</Alert>}
       {documents.map((document) => (
         <div className="slot" key={document.id}>
           <p className="slot__info">

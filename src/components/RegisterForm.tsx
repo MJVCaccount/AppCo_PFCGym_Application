@@ -9,6 +9,7 @@ import { EMPTY_FORM_STATE } from "@/lib/validation";
 
 import Alert from "./Alert";
 import PasswordField from "./PasswordField";
+import SelectField from "./SelectField";
 import SubmitButton from "./SubmitButton";
 import TextField from "./TextField";
 
@@ -50,25 +51,20 @@ export default function RegisterForm({ plans, selectedPlanId }: Props) {
         error={state.errors?.phone}
       />
 
-      <div className="field">
-        <label htmlFor="f-planId">Membership plan</label>
-        <select
-          id="f-planId"
-          name="planId"
-          defaultValue={state.values?.planId ?? selectedPlanId ?? ""}
-          aria-invalid={state.errors?.planId ? "true" : undefined}
-        >
-          <option value="">Choose a plan</option>
-          {plans.map((plan) => (
-            <option key={plan.id} value={plan.id}>
-              R{formatPrice(plan.pricePerMonth)} / month
-            </option>
-          ))}
-        </select>
-        <span className="error" role="alert">
-          {state.errors?.planId ?? ""}
-        </span>
-      </div>
+      {/* Was a hand-rolled select: it had aria-invalid but no
+          aria-describedby, so the error below it was never announced. */}
+      <SelectField
+        name="planId"
+        label="Membership plan"
+        emptyLabel="Choose a plan"
+        required={false}
+        options={plans.map((plan) => ({
+          value: String(plan.id),
+          label: `R${formatPrice(plan.pricePerMonth)} / month`,
+        }))}
+        defaultValue={state.values?.planId ?? selectedPlanId ?? ""}
+        error={state.errors?.planId}
+      />
 
       <PasswordField
         name="password"

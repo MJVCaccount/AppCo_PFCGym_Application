@@ -63,7 +63,16 @@ export default function ContactForm() {
           overflow: "hidden",
         }}
       >
-        <label htmlFor="contact-website">Leave this field empty</label>
+        {/* The trap is positioned off-screen, which hides it from sighted
+            users but NOT from a screen reader: it reads the accessibility
+            tree, not the layout, so a screen reader user met a field asking
+            to be left empty and could fill it in and have a valid enquiry
+            silently rejected. aria-hidden takes it out of that tree, and
+            tabIndex keeps it off the tab order, so only a bot reading the
+            raw DOM finds it. */}
+        <label htmlFor="contact-website" aria-hidden="true">
+          Leave this field empty
+        </label>
         <input
           id="contact-website"
           name="website"
@@ -71,6 +80,7 @@ export default function ContactForm() {
           tabIndex={-1}
           autoComplete="off"
           defaultValue=""
+          aria-hidden="true"
         />
       </div>
 

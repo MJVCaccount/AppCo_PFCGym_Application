@@ -62,7 +62,6 @@ export default async function AdminMembersPage({
         <div className="field">
           <label htmlFor="f-q">Search by name or email</label>
           <input id="f-q" name="q" type="search" defaultValue={q} maxLength={100} />
-          <span className="error" role="alert" />
         </div>
         <button className="btn btn--red btn--sm" type="submit">
           Search
