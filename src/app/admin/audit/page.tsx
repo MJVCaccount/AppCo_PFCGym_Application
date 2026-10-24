@@ -17,7 +17,7 @@ export default async function AdminAuditPage() {
     <>
       <div className="section-head">
         <p className="eyebrow">Admin</p>
-        <h2>Audit log</h2>
+        <h1>Audit log</h1>
         <p className="lead">The latest 100 changes, newest first. Times are Johannesburg time.</p>
       </div>
 

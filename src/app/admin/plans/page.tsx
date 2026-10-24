@@ -37,7 +37,7 @@ export default async function AdminPlansPage({
     <>
       <div className="section-head">
         <p className="eyebrow">Admin</p>
-        <h2>Plans</h2>
+        <h1>Plans</h1>
         <p className="lead">Prices are whole rands per month. Only one plan can be the most popular.</p>
       </div>
 

@@ -64,7 +64,7 @@ export default async function AdminDashboard({
           <div className="section-head section-head--row">
             <div>
               <p className="eyebrow">Overview</p>
-              <h2>Admin</h2>
+              <h1>Admin</h1>
             </div>
             <form action={logout}>
               <button className="pill-link" type="submit">

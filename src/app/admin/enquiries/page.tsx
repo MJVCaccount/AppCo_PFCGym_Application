@@ -33,7 +33,7 @@ export default async function AdminEnquiriesPage({
     <>
       <div className="section-head">
         <p className="eyebrow">Admin</p>
-        <h2>Enquiries</h2>
+        <h1>Enquiries</h1>
         <p className="lead">
           Messages from the contact form. Unhandled ones come first.
         </p>

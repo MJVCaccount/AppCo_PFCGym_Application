@@ -61,7 +61,7 @@ export default async function TimetablePage({
         <div className="wrap">
           <div className="section-head">
             <p className="eyebrow">Weekly schedule</p>
-            <h2>Timetable</h2>
+            <h1>Timetable</h1>
             <p className="lead">
               Book a spot up to seven days ahead. Places are limited and fill
               quickly in the evenings.

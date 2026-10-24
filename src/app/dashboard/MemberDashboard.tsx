@@ -65,7 +65,7 @@ export default async function MemberDashboard({
           <div className="section-head section-head--row">
             <div>
               <p className="eyebrow">Account</p>
-              <h2>Your membership</h2>
+              <h1>Your membership</h1>
             </div>
             <form action={logout}>
               <button className="pill-link" type="submit">

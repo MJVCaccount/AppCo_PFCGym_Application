@@ -51,7 +51,7 @@ export default async function AdminMembersPage({
     <>
       <div className="section-head">
         <p className="eyebrow">Admin</p>
-        <h2>Members</h2>
+        <h1>Members</h1>
         <p className="lead">Every account: members, fighters, coaches and administrators.</p>
       </div>
 

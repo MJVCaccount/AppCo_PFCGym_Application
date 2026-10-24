@@ -78,7 +78,7 @@ export default async function AdminClassesPage({
     <>
       <div className="section-head">
         <p className="eyebrow">Admin</p>
-        <h2>Classes</h2>
+        <h1>Classes</h1>
         <p className="lead">The weekly timetable, and the public classes catalogue.</p>
       </div>
 

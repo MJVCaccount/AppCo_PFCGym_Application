@@ -49,7 +49,7 @@ export default async function RosterPage({
       <div className="wrap">
         <div className="section-head">
           <p className="eyebrow">Roster</p>
-          <h2>{roster.className}</h2>
+          <h1>{roster.className}</h1>
           <p className="lead">
             {DAY_NAMES[roster.day]} {roster.startsAt} · {formatSessionDate(roster.sessionDate)} · {roster.coachName}
           </p>

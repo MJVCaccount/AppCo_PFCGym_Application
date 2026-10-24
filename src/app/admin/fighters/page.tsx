@@ -38,7 +38,7 @@ export default async function AdminFightersPage({
     <>
       <div className="section-head">
         <p className="eyebrow">Admin</p>
-        <h2>Fighters</h2>
+        <h1>Fighters</h1>
         <p className="lead">Members who compete. Their record follows the results you enter.</p>
       </div>
 

@@ -33,7 +33,7 @@ export default async function AdminDocumentsPage({
     <>
       <div className="section-head">
         <p className="eyebrow">Admin</p>
-        <h2>Fighter documents</h2>
+        <h1>Fighter documents</h1>
         <p className="lead">
           Medical and licence documents. They are private: open one only to
           review it. Pending documents come first.

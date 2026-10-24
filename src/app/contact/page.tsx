@@ -16,7 +16,7 @@ export default function ContactPage() {
       <div className="wrap">
         <div className="section-head">
           <p className="eyebrow">Get in touch</p>
-          <h2>Contact us</h2>
+          <h1>Contact us</h1>
           <p className="lead">
             Ready to start your journey? We&apos;d love to hear from you.
           </p>

@@ -21,7 +21,7 @@ export default async function CoachesPage() {
         <div className="wrap">
           <div className="section-head">
             <p className="eyebrow">Expert coaching</p>
-            <h2>Our coaches</h2>
+            <h1>Our coaches</h1>
             <p className="lead">
               World-class coaches committed to your performance and growth.
             </p>

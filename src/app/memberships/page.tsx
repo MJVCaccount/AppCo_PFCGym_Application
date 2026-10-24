@@ -43,7 +43,7 @@ export default async function MembershipsPage({
           <>
             <div className="section-head">
               <p className="eyebrow">Your account</p>
-              <h2>Your membership</h2>
+              <h1>Your membership</h1>
               <p className="lead">
                 You are on the R{formatPrice(currentPlan.pricePerMonth)} plan.
               </p>

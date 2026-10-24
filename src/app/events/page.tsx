@@ -20,7 +20,7 @@ export default async function EventsPage() {
       <div className="wrap">
         <div className="section-head">
           <p className="eyebrow">Fight calendar</p>
-          <h2>Upcoming events</h2>
+          <h1>Upcoming events</h1>
           <p className="lead">
             Fight nights and championships featuring PFC fighters.
           </p>
