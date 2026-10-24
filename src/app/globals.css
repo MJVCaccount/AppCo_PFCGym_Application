@@ -11,14 +11,47 @@
   --surface-2:#1F1F1F;
   --surface-3:#252525;
   --line:rgba(255,255,255,.08);
-  --red:#FF0000;          /* brand accent — text/borders on black, 5.25:1 */
+  --surface-4:#2C2C2C;
+  --raise:#1C1C1C;        /* raised panel on a card */
+  --raise-2:#333333;      /* hover fill and hairlines on raised panels */
+  --line-solid:#1A1A1A;   /* opaque divider where a translucent one banners */
+  --line-2:#1E1E1E;       /* footer rule */
+  --line-3:#232323;       /* rule inside a raised panel */
+  --sunk:#050505;         /* nav overlay and footer, just off pure black */
+  --outline:#303030;      /* decorative pill outline, non-interactive */
+  --outline-2:#444444;    /* muted/disabled chip and slot edges */
+  --ink:#111111;          /* darkest end of the red-to-black gradients */
+
+  /* Red has two roles and they need two values. #FF0000 clears AA on pure
+     black (5.25:1) but NOT on a card: 4.48:1 on --surface, 4.12:1 on
+     --surface-2, 3.83:1 on --surface-3. Every one of those is below the 4.5:1
+     WCAG 1.4.3 asks of normal-size text, and most red text on this site sits
+     on a card, not on the page. So: */
+  --red:#FF0000;          /* borders, fills, icons, accent-color, hero display
+                             type — non-text and large text, where the bar is
+                             3:1 and this clears it on every surface */
+  --red-text:#FF4D4D;     /* small red TEXT — 6.42:1 on --bg, 5.48:1 on
+                             --surface, 5.04:1 on --surface-2, 4.69:1 on
+                             --surface-3, so it passes wherever it lands */
   --red-btn:#E60000;      /* button fill — white text on this is 4.81:1, passes AA */
   --red-hover:#C20000;
   --red-deep:#2A0505;
   --txt:#FFFFFF;
+  --txt-2:#D2D2D2;
+  --txt-3:#DCDCDC;
+  --txt-4:#D8D8D8;
   --mut:#9C9C9C;
   --mut-2:#8C8C8C;
   --ok:#2ECC71;
+  --ok-soft:#8BE6B4;
+  --err-text:#FF6B6B;     /* field error copy — 6.46:1 on --surface */
+  --err-soft:#FF9E9E;
+
+  /* A form control's boundary is non-text contrast (WCAG 1.4.11, 3:1). The
+     fill alone cannot carry it: --surface-3 against a --surface card is
+     1.17:1, so an input with a transparent border has no visible edge. */
+  --field-border:#707070; /* 3.10:1 vs the fill, 3.62:1 vs a card,
+                             3.33:1 vs --surface-2, 4.24:1 vs the page */
 
   --r-card:14px;
   --r-btn:10px;
@@ -54,7 +87,7 @@ ul{list-style:none}
 
 .skip-link{
   position:absolute;left:-9999px;top:0;z-index:999;
-  background:var(--red-btn);color:#fff;padding:12px 18px;font-weight:700;
+  background:var(--red-btn);color:var(--txt);padding:12px 18px;font-weight:700;
 }
 .skip-link:focus{left:0}
 
@@ -71,12 +104,17 @@ ul{list-style:none}
 .eyebrow{
   display:flex;align-items:center;gap:9px;
   font-size:10px;font-weight:800;letter-spacing:.16em;
-  text-transform:uppercase;color:var(--red);margin-bottom:8px;
+  text-transform:uppercase;color:var(--red-text);margin-bottom:8px;
 }
 .eyebrow::before{content:"";width:26px;height:2px;background:var(--red);flex:none}
 
 h1,h2,h3{font-weight:900;letter-spacing:-.02em;text-transform:uppercase;line-height:1.02}
-h2{font-size:var(--fs-h2)}
+/* h1 and h2 share a size on purpose. Most pages open with a section heading
+   that was marked up as <h2> with no <h1> above it, so a screen reader user
+   jumping by heading found no heading naming the page. Promoting those to
+   <h1> is a markup fix, not a visual one, so the size has to be identical;
+   .hero h1 below still overrides it with the display size. */
+h1,h2{font-size:var(--fs-h2)}
 h3{font-size:var(--fs-h3);letter-spacing:-.01em}
 .lead{color:var(--mut);font-size:14px;margin-top:10px;max-width:56ch}
 
@@ -92,24 +130,24 @@ h3{font-size:var(--fs-h3);letter-spacing:-.01em}
   transition:background .18s var(--ease),transform .18s var(--ease),border-color .18s var(--ease);
 }
 .btn:active{transform:translateY(1px)}
-.btn--red{background:var(--red-btn);color:#fff}
+.btn--red{background:var(--red-btn);color:var(--txt)}
 .btn--red:hover{background:var(--red-hover)}
-.btn--ghost{border-color:var(--red);color:var(--red)}
+.btn--ghost{border-color:var(--red);color:var(--red-text)}
 .btn--ghost:hover{background:rgba(255,0,0,.1)}
-.btn--line{border-color:#fff;color:#fff}
+.btn--line{border-color:var(--txt);color:var(--txt)}
 .btn--line:hover{background:rgba(255,255,255,.1)}
-.btn--grey{background:var(--surface-3);color:#fff}
-.btn--grey:hover{background:#333}
+.btn--grey{background:var(--surface-3);color:var(--txt)}
+.btn--grey:hover{background:var(--raise-2)}
 .btn--block{display:flex;width:100%}
 .btn--sm{min-height:40px;padding:0 16px;font-size:11px}
 
 .pill-link{
   display:inline-flex;align-items:center;gap:7px;white-space:nowrap;
-  border:1px solid #fff;border-radius:var(--r-pill);padding:9px 15px;
+  border:1px solid var(--txt);border-radius:var(--r-pill);padding:9px 15px;
   font-size:10px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;
   transition:background .18s var(--ease);
 }
-.pill-link:hover{background:#fff;color:#000}
+.pill-link:hover{background:var(--txt);color:var(--bg)}
 
 /* ---------- 5. Header / nav ---------- */
 .header{
@@ -135,19 +173,19 @@ h3{font-size:var(--fs-h3);letter-spacing:-.01em}
   font-size:11px;font-weight:700;letter-spacing:.1em;
   text-transform:uppercase;color:var(--mut);
 }
-.header__login:hover{color:#fff}
+.header__login:hover{color:var(--txt)}
 
 .burger{
   display:flex;flex-direction:column;justify-content:center;gap:5px;
   width:44px;height:44px;align-items:center;
   background:none;border:0;cursor:pointer;
 }
-.burger span{width:22px;height:2px;background:#fff;border-radius:2px;transition:.22s var(--ease)}
+.burger span{width:22px;height:2px;background:var(--txt);border-radius:2px;transition:.22s var(--ease)}
 .burger span:last-child{width:14px;background:var(--red);align-self:flex-start;margin-left:11px}
 
 /* full-screen nav overlay (phone + tablet) */
 .navpanel{
-  position:fixed;inset:0;z-index:80;background:#050505;
+  position:fixed;inset:0;z-index:80;background:var(--sunk);
   display:flex;flex-direction:column;
   transform:translateX(100%);visibility:hidden;
   transition:transform .3s var(--ease),visibility .3s;
@@ -157,17 +195,17 @@ h3{font-size:var(--fs-h3);letter-spacing:-.01em}
 .navpanel__top{display:flex;justify-content:flex-end;padding:14px var(--pad)}
 .navpanel__close{
   width:44px;height:44px;border-radius:var(--r-pill);
-  border:1.5px solid #fff;background:none;cursor:pointer;
+  border:1.5px solid var(--txt);background:none;cursor:pointer;
   font-size:20px;line-height:1;
 }
 .navpanel__list{padding:8px var(--pad)}
 .navpanel__list a{
   display:flex;align-items:center;justify-content:space-between;
-  padding:18px 0;border-bottom:1px solid #1A1A1A;
+  padding:18px 0;border-bottom:1px solid var(--line-solid);
   font-size:26px;font-weight:900;text-transform:uppercase;letter-spacing:-.02em;
 }
 .navpanel__list a[aria-current="page"]{color:var(--red)}
-.navpanel__list a span{font-size:13px;font-weight:700;color:#333}
+.navpanel__list a span{font-size:13px;font-weight:700;color:var(--mut-2)}
 .navpanel__cta{display:flex;flex-direction:column;gap:10px;padding:24px var(--pad)}
 .navpanel__meta{padding:0 var(--pad) 40px;color:var(--mut-2);font-size:12px;line-height:1.9}
 
@@ -181,11 +219,11 @@ h3{font-size:var(--fs-h3);letter-spacing:-.01em}
 .hero__bg{position:absolute;inset:0;z-index:-2;width:100%;height:100%;object-fit:cover}
 .hero::after{
   content:"";position:absolute;inset:0;z-index:-1;
-  background:linear-gradient(180deg,rgba(0,0,0,.5) 0%,rgba(0,0,0,.72) 45%,#000 100%);
+  background:linear-gradient(180deg,rgba(0,0,0,.5) 0%,rgba(0,0,0,.72) 45%,var(--bg) 100%);
 }
 .hero h1{font-size:var(--fs-hero)}
 .hero h1 em{font-style:normal;color:var(--red);display:block}
-.hero__sub{color:#D2D2D2;font-size:15px;margin-top:18px;max-width:34ch;line-height:1.55}
+.hero__sub{color:var(--txt-2);font-size:15px;margin-top:18px;max-width:34ch;line-height:1.55}
 .hero__cta{display:flex;flex-direction:column;gap:10px;margin-top:26px}
 .hero__meta{
   display:flex;margin-top:28px;padding-top:16px;
@@ -196,7 +234,7 @@ h3{font-size:var(--fs-h3);letter-spacing:-.01em}
 .hero__meta dt{font-size:9px;letter-spacing:.12em;color:var(--mut-2);text-transform:uppercase}
 .hero__meta dd{font-size:13px;font-weight:700;margin-top:5px}
 .status-open{color:var(--ok);font-size:10px}
-.hero__meta .price{color:var(--red)}
+.hero__meta .price{color:var(--red-text)}
 
 /* ---------- 7. Cards + scrollers ---------- */
 .card{
@@ -211,7 +249,7 @@ h3{font-size:var(--fs-h3);letter-spacing:-.01em}
 .card__tags{display:flex;flex-wrap:wrap;gap:7px;margin-top:12px}
 .tag{
   font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--mut);
-  border:1px solid #303030;border-radius:var(--r-pill);padding:5px 10px;
+  border:1px solid var(--outline);border-radius:var(--r-pill);padding:5px 10px;
 }
 
 /* horizontal scroller on phones, grid from tablet up */
@@ -229,10 +267,10 @@ h3{font-size:var(--fs-h3);letter-spacing:-.01em}
 /* ---------- 8. Stats ---------- */
 .stats{
   display:grid;grid-template-columns:1fr 1fr;
-  border-block:1px solid #2C2C2C;
+  border-block:1px solid var(--surface-4);
 }
-.stats div{padding:20px 8px;text-align:center;border-bottom:1px solid #1C1C1C}
-.stats div:nth-child(odd){border-right:1px solid #1C1C1C}
+.stats div{padding:20px 8px;text-align:center;border-bottom:1px solid var(--raise)}
+.stats div:nth-child(odd){border-right:1px solid var(--raise)}
 .stats div:last-child{grid-column:1/-1;border-bottom:0;border-right:0}
 .stats b{display:block;font-size:clamp(28px,8vw,40px);font-weight:900;letter-spacing:-.03em}
 .stats span{display:block;margin-top:4px;font-size:9px;letter-spacing:.12em;color:var(--mut);text-transform:uppercase}
@@ -253,7 +291,7 @@ h3{font-size:var(--fs-h3);letter-spacing:-.01em}
 .plan__price sup{font-size:21px;vertical-align:top;position:relative;top:7px}
 .plan__price small{font-size:12px;font-weight:500;color:var(--mut);letter-spacing:0}
 .plan ul{margin:20px 0 22px;flex:1}
-.plan li{position:relative;padding-left:20px;margin-bottom:11px;font-size:13px;color:#D8D8D8}
+.plan li{position:relative;padding-left:20px;margin-bottom:11px;font-size:13px;color:var(--txt-4)}
 .plan li::before{
   content:"";position:absolute;left:0;top:8px;
   width:6px;height:6px;border-radius:var(--r-pill);background:var(--red);
@@ -269,10 +307,10 @@ h3{font-size:var(--fs-h3);letter-spacing:-.01em}
   border-radius:var(--r-pill);border:2px solid var(--red);
   display:grid;place-items:center;
   font-size:24px;font-weight:900;letter-spacing:-.02em;
-  background:linear-gradient(145deg,#2A0505,#111);
+  background:linear-gradient(145deg,var(--red-deep),var(--ink));
 }
 .coach h3{font-size:15px}
-.coach__role{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--red);margin-top:6px}
+.coach__role{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--red-text);margin-top:6px}
 .coach p{color:var(--mut);font-size:12px;margin-top:10px}
 
 /* ---------- 11. Timetable ---------- */
@@ -287,8 +325,8 @@ h3{font-size:var(--fs-h3);letter-spacing:-.01em}
   font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;
   transition:background .18s var(--ease),color .18s var(--ease);
 }
-.day:hover{background:#2C2C2C;color:#fff}
-.day[aria-selected="true"]{background:var(--red-btn);color:#fff}
+.day:hover{background:var(--surface-4);color:var(--txt)}
+.day[aria-selected="true"]{background:var(--red-btn);color:var(--txt)}
 
 .slot{
   display:flex;align-items:center;gap:14px;
@@ -296,26 +334,26 @@ h3{font-size:var(--fs-h3);letter-spacing:-.01em}
   border-radius:12px;padding:15px 14px;margin-bottom:11px;
 }
 .slot__time{flex:0 0 56px}
-.slot__time b{display:block;color:var(--red);font-size:16px;font-weight:900}
+.slot__time b{display:block;color:var(--red-text);font-size:16px;font-weight:900}
 .slot__time span{font-size:10px;color:var(--mut-2)}
 .slot__info{flex:1;min-width:0}
 .slot__info b{display:block;font-size:14px;font-weight:800;text-transform:uppercase}
 .slot__info span{font-size:12px;color:var(--mut)}
-.slot__full{opacity:.45;border-left-color:#444}
+.slot__full{opacity:.45;border-left-color:var(--outline-2)}
 .slot__actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px}
 
 /* ---------- 12. Testimonials + gallery ---------- */
 .quote{background:var(--surface);border-radius:var(--r-card);padding:20px}
-.stars{color:var(--red);letter-spacing:2px;margin-bottom:12px}
-.quote p{font-size:13px;line-height:1.65;color:#DCDCDC}
+.stars{color:var(--red-text);letter-spacing:2px;margin-bottom:12px}
+.quote p{font-size:13px;line-height:1.65;color:var(--txt-3)}
 .quote figcaption{display:flex;align-items:center;gap:10px;margin-top:16px}
 .quote .av{
   width:36px;height:36px;flex:none;border-radius:var(--r-pill);
-  background:linear-gradient(145deg,#2A0505,#111);border:1px solid #333;
+  background:linear-gradient(145deg,var(--red-deep),var(--ink));border:1px solid var(--raise-2);
   display:grid;place-items:center;font-size:12px;font-weight:800;
 }
 .quote b{display:block;font-size:13px}
-.quote time{font-size:11px;color:var(--red)}
+.quote time{font-size:11px;color:var(--red-text)}
 
 .gallery{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .gallery img{aspect-ratio:1;object-fit:cover;border-radius:10px;width:100%}
@@ -338,21 +376,55 @@ h3{font-size:var(--fs-h3);letter-spacing:-.01em}
 }
 .field input,.field textarea,.field select{
   width:100%;min-height:50px;padding:13px 15px;
-  background:var(--surface-3);border:1.5px solid transparent;border-radius:9px;
+  background:var(--surface-3);border:1.5px solid var(--field-border);border-radius:9px;
   transition:border-color .18s var(--ease);
 }
 .field textarea{min-height:130px;resize:vertical}
-.field input::placeholder,.field textarea::placeholder{color:#8C8C8C}
+.field input::placeholder,.field textarea::placeholder{color:var(--mut-2)}
 .field input:focus,.field textarea:focus,.field select:focus{border-color:var(--red);outline:none}
-/* Keyboard focus ring: 2px red, 2px clear of the field so it is not clipped.
-   Red #FF0000 against the field (#252525) is 3.83:1, against the page
-   (#000000) 5.25:1 and against a card (#171717) 4.48:1; all above the 3:1
-   that WCAG 1.4.11 asks of a focus indicator. */
+/* Keyboard focus ring: 2px --red, 2px clear of the field so it is not clipped.
+   #FF0000 is 3.83:1 against the field fill, 5.25:1 against the page and
+   4.48:1 against a card; all above the 3:1 WCAG 1.4.11 asks of a focus
+   indicator, which is why the ring keeps --red while red TEXT does not. */
 .field input:focus-visible,.field textarea:focus-visible,.field select:focus-visible{
   outline:2px solid var(--red);outline-offset:2px;
 }
-.field input[aria-invalid="true"],.field textarea[aria-invalid="true"]{border-color:#FF4D4D}
-.field .error{display:block;margin-top:6px;font-size:11px;color:#FF6B6B;min-height:14px}
+.field input[aria-invalid="true"],.field textarea[aria-invalid="true"],
+.field select[aria-invalid="true"]{border-color:var(--red-text)}
+.field .error{display:block;margin-top:6px;font-size:11px;color:var(--err-text);min-height:14px}
+
+/* Hint and legend slots. The hint node is always in the DOM so the id in
+   aria-describedby resolves, so it has to collapse when it holds no text —
+   otherwise every field without a hint gains a blank line. It is NOT inside
+   the <label>: text in there joins the control's accessible name, which made
+   a phone field announce as "Phone Optional". */
+.field__hint{
+  display:block;margin:-2px 0 7px;
+  font-size:11px;line-height:1.45;color:var(--mut-2);
+  text-transform:none;letter-spacing:0;
+}
+.field__hint:empty{display:none}
+/* A heading above a control that already has its own label — not a second
+   label, so it must not be a <label> element. */
+.field__legend{
+  display:block;margin-bottom:7px;
+  font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--mut);
+}
+
+/* A file input ignores most box styling, so the clickable part is styled
+   through ::file-selector-button instead. */
+.field input[type="file"]{padding:11px 13px;line-height:1.5;cursor:pointer}
+.field input[type="file"]::file-selector-button{
+  margin-right:12px;padding:9px 14px;
+  border:1.5px solid var(--field-border);border-radius:var(--r-btn);
+  background:var(--raise);color:var(--txt);
+  font:inherit;font-size:11px;font-weight:800;letter-spacing:.08em;
+  text-transform:uppercase;cursor:pointer;
+  transition:background .18s var(--ease);
+}
+.field input[type="file"]::file-selector-button:hover{background:var(--raise-2)}
+.field input[type="file"]:disabled{opacity:.55;cursor:not-allowed}
+
 .field__row{display:flex;gap:10px;align-items:center}
 .field__row input{flex:1}
 .toggle-pw{
@@ -367,17 +439,19 @@ h3{font-size:var(--fs-h3);letter-spacing:-.01em}
   border:1px solid;
 }
 .alert.is-shown{display:flex}
-.alert--ok{background:rgba(46,204,113,.1);border-color:rgba(46,204,113,.45);color:#8BE6B4}
-.alert--err{background:rgba(255,0,0,.1);border-color:rgba(255,0,0,.45);color:#FF9E9E}
+.alert--ok{background:rgba(46,204,113,.1);border-color:rgba(46,204,113,.45);color:var(--ok-soft)}
+.alert--err{background:rgba(255,0,0,.1);border-color:rgba(255,0,0,.45);color:var(--err-soft)}
 
 /* auth pages */
 .auth{min-height:calc(100svh - 62px);display:grid;place-items:center;padding:40px var(--pad)}
 .auth__card{width:100%;max-width:420px;background:var(--surface);border-radius:var(--r-card);padding:26px 22px}
-.auth__logo{width:120px;height:58px;margin:0 auto 26px;border:1.5px solid var(--red);border-radius:6px;
-  display:grid;place-items:center;font-size:24px;font-weight:900;transform:skewX(-8deg)}
+/* Held a skewed, red-bordered box with the letters "PFC" in it, standing in
+   for the real mark. Now that the artwork is here it is just a centring
+   wrapper: the box and the skew would fight the hexagon's own shape. */
+.auth__logo{display:grid;place-items:center;margin:0 auto 26px}
 .auth h1{text-align:center;font-size:30px;margin-bottom:22px}
 .auth__alt{text-align:center;font-size:13px;color:var(--mut);margin-top:22px}
-.auth__alt a{color:var(--red);font-weight:700}
+.auth__alt a{color:var(--red-text);font-weight:700}
 
 /* ---------- 15. Dashboard ---------- */
 .dash{display:grid;gap:0}
@@ -389,7 +463,7 @@ h3{font-size:var(--fs-h3);letter-spacing:-.01em}
 .dash__user{display:flex;align-items:center;gap:11px}
 .dash__avatar{
   width:40px;height:40px;flex:none;border-radius:var(--r-pill);
-  background:linear-gradient(145deg,#2A0505,#111);border:1px solid #333;
+  background:linear-gradient(145deg,var(--red-deep),var(--ink));border:1px solid var(--raise-2);
   display:grid;place-items:center;font-size:13px;font-weight:800;
 }
 .dash__user b{display:block;font-size:14px;text-transform:uppercase;letter-spacing:-.01em}
@@ -402,12 +476,12 @@ h3{font-size:var(--fs-h3);letter-spacing:-.01em}
 .dash-grid{display:grid;gap:14px}
 
 /* ---------- 16. Footer ---------- */
-.footer{background:#050505;border-top:1px solid #1E1E1E;padding:34px 0 22px;margin-top:20px}
+.footer{background:var(--sunk);border-top:1px solid var(--line-2);padding:34px 0 22px;margin-top:20px}
 .footer__cols{display:grid;gap:0}
 .footer h4{
   font-size:11px;letter-spacing:.14em;text-transform:uppercase;font-weight:700;
 }
-.footer details{border-bottom:1px solid #1A1A1A}
+.footer details{border-bottom:1px solid var(--line-solid)}
 .footer summary{
   display:flex;justify-content:space-between;align-items:center;
   padding:15px 0;cursor:pointer;list-style:none;
@@ -417,18 +491,18 @@ h3{font-size:var(--fs-h3);letter-spacing:-.01em}
 .footer details[open] summary::after{content:"−"}
 .footer details ul,.footer details dl{padding-bottom:16px}
 .footer details li{padding:6px 0;color:var(--mut);font-size:13px}
-.footer details li a:hover{color:#fff}
+.footer details li a:hover{color:var(--txt)}
 .hours{display:grid;grid-template-columns:auto 1fr;gap:7px 16px;font-size:13px;padding-bottom:16px}
 .hours dt{color:var(--mut-2)}
-.hours dd{text-align:right;color:#D2D2D2}
+.hours dd{text-align:right;color:var(--txt-2)}
 .contact-list{display:flex;flex-direction:column;gap:13px;padding:18px 0}
-.contact-list li{display:flex;gap:11px;align-items:center;font-size:13px;color:#D2D2D2}
+.contact-list li{display:flex;gap:11px;align-items:center;font-size:13px;color:var(--txt-2)}
 .contact-list .ico{
   width:18px;height:18px;flex:none;border-radius:4px;background:var(--red-btn);
   display:grid;place-items:center;font-size:10px;
 }
 .footer__legal{
-  margin-top:22px;padding-top:16px;border-top:1px solid #1A1A1A;
+  margin-top:22px;padding-top:16px;border-top:1px solid var(--line-solid);
   font-size:11px;color:var(--mut-2);display:grid;gap:10px;
 }
 .footer__legal nav{display:flex;gap:16px;flex-wrap:wrap}
@@ -438,7 +512,7 @@ h3{font-size:var(--fs-h3);letter-spacing:-.01em}
   position:sticky;bottom:0;z-index:50;
   display:flex;align-items:center;gap:12px;
   background:rgba(8,8,8,.95);backdrop-filter:blur(12px);
-  border-top:1px solid #232323;
+  border-top:1px solid var(--line-3);
   padding:12px var(--pad) calc(12px + env(safe-area-inset-bottom));
 }
 .sticky-cta small{display:block;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--mut-2)}
@@ -469,7 +543,7 @@ h3{font-size:var(--fs-h3);letter-spacing:-.01em}
   .grid--3{grid-template-columns:repeat(2,1fr)}
 
   .stats{grid-template-columns:repeat(3,1fr)}
-  .stats div:nth-child(odd){border-right:1px solid #1C1C1C}
+  .stats div:nth-child(odd){border-right:1px solid var(--raise)}
   .stats div:last-child{grid-column:auto}
 
   .plans{grid-template-columns:repeat(3,1fr)}
@@ -501,8 +575,8 @@ h3{font-size:var(--fs-h3);letter-spacing:-.01em}
     font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
     color:var(--mut);transition:color .18s var(--ease);
   }
-  .nav a:hover,.nav a[aria-current="page"]{color:#fff}
-  .nav a[aria-current="page"]{color:var(--red)}
+  .nav a:hover,.nav a[aria-current="page"]{color:var(--txt)}
+  .nav a[aria-current="page"]{color:var(--red-text)}
   .burger{display:none}
   .navpanel{display:none}
   .sticky-cta{display:none}
@@ -563,7 +637,6 @@ button.btn--line{background:transparent}
 
 /* the contact/auth forms post to server actions; keep the error text height
    reserved so the layout does not jump when a message appears */
-.field .error:empty{display:block}
 
 .dash__side .btn{text-align:center}
 
@@ -587,7 +660,7 @@ button.day{
   background:none;color:inherit;cursor:pointer;font:inherit;
   font-size:10px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;
 }
-button.pill-link:hover{background:#fff;color:#000}
+button.pill-link:hover{background:var(--txt);color:var(--bg)}
 
 /* ---------- 24. Admin and coach screens ---------- */
 .admin-nav{display:flex;flex-wrap:wrap;gap:8px}
@@ -609,12 +682,12 @@ button.pill-link:hover{background:#fff;color:#000}
   text-align:left;padding:12px 14px;font-size:9px;letter-spacing:.12em;
   text-transform:uppercase;color:var(--mut-2);border-bottom:1px solid var(--line);white-space:nowrap;
 }
-.admin-table td{padding:12px 14px;border-bottom:1px solid #1C1C1C;vertical-align:middle}
+.admin-table td{padding:12px 14px;border-bottom:1px solid var(--raise);vertical-align:middle}
 .admin-table tr:last-child td{border-bottom:0}
 .admin-table .muted{color:var(--mut);font-size:12px}
 .admin-actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
 .admin-actions form{display:inline-flex;gap:8px;align-items:center}
-.admin-actions select{min-height:40px;padding:0 10px;background:var(--surface-3);border:1.5px solid transparent;border-radius:9px}
+.admin-actions select{min-height:40px;padding:0 10px;background:var(--surface-3);border:1.5px solid var(--field-border);border-radius:9px}
 .admin-confirm{
   display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;
   background:var(--red-deep);border:1px solid var(--red);border-radius:12px;padding:14px 16px;margin-bottom:16px;
@@ -622,11 +695,17 @@ button.pill-link:hover{background:#fff;color:#000}
 .admin-confirm p{flex:1 1 260px;font-size:13px}
 .admin-pager{display:flex;align-items:center;gap:12px;justify-content:space-between;flex-wrap:wrap}
 .check{display:flex;align-items:center;gap:10px;font-size:13px;min-height:44px}
-.check input{width:20px;height:20px;min-height:0;accent-color:var(--red)}
+/* Sits inside .field, so it has to opt out of the text-input box: the
+   padding and the new visible border are meant for a 50px-tall input, not a
+   20px checkbox. */
+.check input{
+  width:20px;height:20px;min-height:0;padding:0;
+  background:none;border:0;accent-color:var(--red);
+}
 .btn[disabled]{opacity:.45;cursor:not-allowed}
-.tag--ok{border-color:rgba(46,204,113,.45);color:#8BE6B4}
-.tag--off{border-color:#444;color:var(--mut-2)}
-.tag--red{border-color:rgba(255,0,0,.45);color:#FF9E9E}
+.tag--ok{border-color:rgba(46,204,113,.45);color:var(--ok-soft)}
+.tag--off{border-color:var(--outline-2);color:var(--mut-2)}
+.tag--red{border-color:rgba(255,0,0,.45);color:var(--err-soft)}
 .help{font-size:12px;color:var(--mut);margin-top:6px}
 .roster-row .btn{min-height:44px}
 @media (min-width:1024px){
