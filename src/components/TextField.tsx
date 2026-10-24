@@ -1,5 +1,7 @@
 import { type HTMLInputTypeAttribute } from "react";
 
+import Field, { fieldIds } from "./Field";
+
 interface Props {
   name: string;
   label: string;
@@ -12,11 +14,16 @@ interface Props {
   full?: boolean;
   multiline?: boolean;
   hint?: string;
+  /** Set where the same form renders twice on a page; see fieldIds. */
+  scope?: string;
 }
 
 /**
- * One labelled input with its error slot. Every field on the site goes
- * through this, so the label association and aria wiring cannot drift.
+ * One labelled input with its hint and error slots.
+ *
+ * The aria wiring lives in Field, so it is identical here, in SelectField,
+ * PasswordField and FileField, and a new field type cannot quietly ship
+ * without it.
  */
 export default function TextField({
   name,
@@ -30,49 +37,30 @@ export default function TextField({
   full = false,
   multiline = false,
   hint,
+  scope,
 }: Props) {
-  const id = `f-${name}`;
-  const describedBy = error ? `${id}-error` : undefined;
+  const ids = fieldIds(name, scope);
+
+  // The hint used to sit inside the <label>, which made the label's accessible
+  // name "Phone Optional" rather than "Phone". It is a description, not part
+  // of the name, so it belongs in the hint slot that describedBy points at.
+  const shared = {
+    id: ids.control,
+    name,
+    placeholder,
+    defaultValue,
+    required,
+    "aria-describedby": ids.describedBy,
+    "aria-invalid": error ? ("true" as const) : ("false" as const),
+  };
 
   return (
-    <div className={`field${full ? " field--full" : ""}`}>
-      <label htmlFor={id}>
-        {label}
-        {hint && (
-          <span style={{ textTransform: "none", letterSpacing: 0 }}>
-            {" "}
-            {hint}
-          </span>
-        )}
-      </label>
-
+    <Field ids={ids} label={label} hint={hint} error={error} full={full}>
       {multiline ? (
-        <textarea
-          id={id}
-          name={name}
-          placeholder={placeholder}
-          defaultValue={defaultValue}
-          aria-invalid={error ? "true" : undefined}
-          aria-describedby={describedBy}
-          required={required}
-        />
+        <textarea {...shared} />
       ) : (
-        <input
-          id={id}
-          name={name}
-          type={type}
-          placeholder={placeholder}
-          autoComplete={autoComplete}
-          defaultValue={defaultValue}
-          aria-invalid={error ? "true" : undefined}
-          aria-describedby={describedBy}
-          required={required}
-        />
+        <input {...shared} type={type} autoComplete={autoComplete} />
       )}
-
-      <span className="error" id={`${id}-error`} role="alert">
-        {error ?? ""}
-      </span>
-    </div>
+    </Field>
   );
 }
