@@ -11,7 +11,7 @@ import Image from "next/image";
  *
  * The source is 474px wide, so the largest render on the site still sits
  * above 3x device density. It is decorative wherever a visible "PFC" label
- * sits beside it, and labelled otherwise — the `alt` prop decides, and the
+ * sits beside it, and labelled otherwise â€” the `alt` prop decides, and the
  * default is the brand name so a bare logo link is never unlabelled.
  */
 
@@ -28,7 +28,7 @@ interface Props {
     variant?: Variant;
     /** Rendered width in CSS pixels. Height follows the artwork's ratio. */
     width?: number;
-    /** Empty string marks it decorative — only when nearby text already says "PFC". */
+    /** Empty string marks it decorative â€” only when nearby text already says "PFC". */
     alt?: string;
     className?: string;
     priority?: boolean;
@@ -37,7 +37,7 @@ interface Props {
 export default function Logo({
     variant = "wordmark",
     width = 104,
-    alt = "PFC Gym — Fighting and Fitness",
+    alt = "PFC Gym â€” Fighting and Fitness",
     className,
     priority = false,
 }: Props) {

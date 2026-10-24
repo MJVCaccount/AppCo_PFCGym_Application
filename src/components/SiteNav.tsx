@@ -106,7 +106,7 @@ export default function SiteNav({ session, todayHours, logoutAction }: Props) {
         <>
             <header className="header">
                 <div className="header__inner">
-                    <Link className="logo" href="/" aria-label="PFC Gym — home">
+                    <Link className="logo" href="/" aria-label="PFC Gym â€” home">
                         {/* The link carries the accessible name, so the image itself is
                 decorative and must not be announced a second time. */}
                         <Logo variant="wordmark" width={104} alt="" priority />
@@ -199,7 +199,7 @@ export default function SiteNav({ session, todayHours, logoutAction }: Props) {
                             aria-current={isCurrent(item.href) ? "page" : undefined}
                         >
                             {item.label}
-                            {/* Decorative ordinal — the list order already conveys it. */}
+                            {/* Decorative ordinal â€” the list order already conveys it. */}
                             <span aria-hidden="true">{String(index + 1).padStart(2, "0")}</span>
                         </Link>
                     ))}

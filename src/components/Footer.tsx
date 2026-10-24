@@ -25,7 +25,7 @@ export default async function Footer() {
                 <Link
                     className="logo"
                     href="/"
-                    aria-label="PFC Gym — home"
+                    aria-label="PFC Gym â€” home"
                     style={{ marginBottom: 22 }}
                 >
                     {/* The link carries the accessible name, so the image itself is
