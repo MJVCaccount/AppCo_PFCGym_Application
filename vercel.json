@@ -3,5 +3,8 @@
   "git": {
     "deploymentEnabled": false
   },
-  "regions": ["lhr1"]
+  "regions": ["lhr1"],
+  "crons": [
+    { "path": "/api/cron/maintenance", "schedule": "0 3 * * *" }
+  ]
 }
