@@ -63,7 +63,7 @@ jobs:
       # for a pull request or a fork, so the commit checked out here is code that has
       # already been merged.
       # nosemgrep: yaml.github-actions.security.workflow-run-target-code-checkout.workflow-run-target-code-checkout
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # The exact commit CI passed on, not whatever main is by now.
           ref: ${{ github.event.workflow_run.head_sha }}
@@ -199,7 +199,7 @@ jobs:
       # for a pull request or a fork, so the commit checked out here is code that has
       # already been merged.
       # nosemgrep: yaml.github-actions.security.workflow-run-target-code-checkout.workflow-run-target-code-checkout
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.event.workflow_run.head_sha }}
 
