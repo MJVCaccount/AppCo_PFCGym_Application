@@ -33,11 +33,11 @@ const rootBlock = /:root\{([\s\S]*?)\n\}/.exec(css);
 assert.ok(rootBlock, "globals.css must declare a :root block");
 
 const tokens = new Map<string, string>();
-for (const line of rootBlock[1].split("\n")) {
+for (const line of rootBlock[1]!.split("\n")) {
   // Strip comments first: several tokens carry their ratio in a trailing one.
   const code = line.replace(/\/\*[\s\S]*?\*\//g, "");
   const m = /^\s*(--[\w-]+)\s*:\s*(#[0-9a-fA-F]{3,6})\s*;/.exec(code);
-  if (m) tokens.set(m[1], m[2].toUpperCase());
+  if (m) tokens.set(m[1]!, m[2]!.toUpperCase());
 }
 
 function token(name: string): string {
@@ -57,12 +57,12 @@ function luminance(hex: string): number {
   let h = hex.replace("#", "");
   if (h.length === 3) h = h.split("").map((c) => c + c).join("");
   const [r, g, b] = [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16));
-  return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
+  return 0.2126 * channel(r!) + 0.7152 * channel(g!) + 0.0722 * channel(b!);
 }
 
 function contrast(a: string, b: string): number {
   const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
-  return (hi + 0.05) / (lo + 0.05);
+  return (hi! + 0.05) / (lo! + 0.05);
 }
 
 /** Rounded down, so a value is never reported better than it is. */

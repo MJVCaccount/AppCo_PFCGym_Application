@@ -115,7 +115,7 @@ export default function DocumentUploadForm() {
   }
 
   return (
-    <form ref={form} className="form form--split" onSubmit={submit} noValidate>
+    <form ref={form} className="form form--split" onSubmit={(event) => void submit(event)} noValidate>
       <SelectField
         name="type"
         label="Document type"

@@ -463,7 +463,7 @@ async function main() {
   await check("listMembers searches case-insensitively, pages by 25 and leaks no credentials", async () => {
     const found = await listMembers(admin, { search: "  JOHN WICK " });
     assert.equal(found.data?.total, 1);
-    assert.equal(found.data?.items[0].email, "member@pfc.co.za");
+    assert.equal(found.data?.items[0]!.email, "member@pfc.co.za");
     assert.equal((await listMembers(admin, { search: "PFC.CO.ZA" })).data!.total >= 9, true);
 
     const page1 = await listMembers(admin, { page: 1 });
@@ -492,15 +492,15 @@ async function main() {
   const plans = await testDb.membershipPlan.findMany({ orderBy: { id: "asc" } });
 
   await check("setMemberPlan moves a member, clears a plan, and refuses retired or unknown ones", async () => {
-    assert.equal((await setMemberPlan(admin, member.id, plans[2].id, now)).status, 200);
-    assert.equal((await testDb.member.findUniqueOrThrow({ where: { membershipId: member.id } })).planId, plans[2].id);
+    assert.equal((await setMemberPlan(admin, member.id, plans[2]!.id, now)).status, 200);
+    assert.equal((await testDb.member.findUniqueOrThrow({ where: { membershipId: member.id } })).planId, plans[2]!.id);
     assert.equal(await audited("member.setPlan", member.id), 1);
     assert.equal((await setMemberPlan(admin, member.id, null, now)).status, 200);
     assert.equal((await setMemberPlan(admin, member.id, 999_999, now)).status, 404);
-    assert.equal((await setMemberPlan(admin, admin.id, plans[0].id, now)).status, 404);
+    assert.equal((await setMemberPlan(admin, admin.id, plans[0]!.id, now)).status, 404);
     assert.equal((await setMemberPlan(admin, member.id, "2", now)).status, 400);
     assert.equal((await setMemberPlan(admin, member.id, 1.5, now)).status, 400);
-    await setMemberPlan(admin, member.id, plans[1].id, now);
+    await setMemberPlan(admin, member.id, plans[1]!.id, now);
   });
 
   await check("a plan is created with validated, de-duplicated features", async () => {
@@ -539,24 +539,24 @@ async function main() {
     let popular = (await listPlans(admin)).data!.filter((p) => p.isMostPopular);
     assert.deepEqual(popular.map((p) => p.id), [created.data!.id]);
 
-    const u = await updatePlan(admin, plans[0].id, { isMostPopular: true });
+    const u = await updatePlan(admin, plans[0]!.id, { isMostPopular: true });
     assert.equal(u.status, 200);
     popular = (await listPlans(admin)).data!.filter((p) => p.isMostPopular);
-    assert.deepEqual(popular.map((p) => p.id), [plans[0].id]);
+    assert.deepEqual(popular.map((p) => p.id), [plans[0]!.id]);
 
     const results = await Promise.all([
-      updatePlan(admin, plans[1].id, { isMostPopular: true }),
-      updatePlan(admin, plans[2].id, { isMostPopular: true }),
+      updatePlan(admin, plans[1]!.id, { isMostPopular: true }),
+      updatePlan(admin, plans[2]!.id, { isMostPopular: true }),
     ]);
     assert.deepEqual(results.map((r) => r.status), [200, 200]);
     assert.equal((await listPlans(admin)).data!.filter((p) => p.isMostPopular).length, 1);
 
     assert.equal((await updatePlan(admin, 999_999, { pricePerMonth: 5 })).status, 404);
-    assert.equal((await updatePlan(admin, plans[0].id, {})).status, 400);
+    assert.equal((await updatePlan(admin, plans[0]!.id, {})).status, 400);
   });
 
   await check("a plan with active members cannot be deactivated; an empty one can", async () => {
-    const busy = await deactivatePlan(admin, plans[1].id);
+    const busy = await deactivatePlan(admin, plans[1]!.id);
     assert.equal(busy.status, 409);
     assert.match(String(busy.error), /active members? (is|are) on this plan/);
 
@@ -618,7 +618,7 @@ async function main() {
   });
 
   await check("deactivating cancels future bookings in the same step; reactivating restores sign-in", async () => {
-    const target = await newMember("leaver@example.co.za", plans[0].id);
+    const target = await newMember("leaver@example.co.za", plans[0]!.id);
     const future = nextOccurrence("sat", "05:00", now);
     const past = addDays(today, -3);
     await testDb.booking.createMany({
@@ -634,7 +634,7 @@ async function main() {
 
     const rows = await testDb.booking.findMany({ where: { memberId: target.id }, orderBy: { sessionDate: "asc" } });
     assert.deepEqual(rows.map((b) => b.status), ["Confirmed", "Cancelled"], "past booking is untouched");
-    assert.ok(rows[1].cancelledAt);
+    assert.ok(rows[1]!.cancelledAt);
 
     assert.equal((await deactivateUser(admin, 999_999, now)).status, 404);
     assert.equal((await deactivateUser(admin, "x", now)).status, 400);
@@ -657,7 +657,7 @@ async function main() {
   });
 
   await check("a promoted member sees the fighter dashboard without signing in again", async () => {
-    const target = await newMember("riser@example.co.za", plans[0].id);
+    const target = await newMember("riser@example.co.za", plans[0]!.id);
     // The cookie is issued while the account is still a Member.
     await createSession({ id: target.id, email: target.email, fullName: target.fullName, role: "Member" });
 
@@ -696,19 +696,19 @@ async function main() {
   while (dayOfDate(pastTuesday) !== "tue") pastTuesday = addDays(pastTuesday, -1);
 
   const pastBooking = await testDb.booking.create({
-    data: { memberId: fillers[4].id, gymClassId: sofiaClass.id, sessionDate: pastTuesday, status: "Confirmed" },
+    data: { memberId: fillers[4]!.id, gymClassId: sofiaClass.id, sessionDate: pastTuesday, status: "Confirmed" },
   });
   const pastBooking2 = await testDb.booking.create({
-    data: { memberId: fillers[5].id, gymClassId: sofiaClass.id, sessionDate: pastTuesday, status: "Confirmed" },
+    data: { memberId: fillers[5]!.id, gymClassId: sofiaClass.id, sessionDate: pastTuesday, status: "Confirmed" },
   });
   const cancelled = await testDb.booking.create({
-    data: { memberId: fillers[3].id, gymClassId: sofiaClass.id, sessionDate: pastTuesday, status: "Cancelled" },
+    data: { memberId: fillers[3]!.id, gymClassId: sofiaClass.id, sessionDate: pastTuesday, status: "Cancelled", cancelledAt: new Date() },
   });
   const futureBooking = await testDb.booking.create({
-    data: { memberId: fillers[4].id, gymClassId: sofiaClass.id, sessionDate: addDays(today, 3), status: "Confirmed" },
+    data: { memberId: fillers[4]!.id, gymClassId: sofiaClass.id, sessionDate: addDays(today, 3), status: "Confirmed" },
   });
   const marcusBooking = await testDb.booking.create({
-    data: { memberId: fillers[4].id, gymClassId: marcusClass.id, sessionDate: pastTuesday, status: "Confirmed" },
+    data: { memberId: fillers[4]!.id, gymClassId: marcusClass.id, sessionDate: pastTuesday, status: "Confirmed" },
   });
 
   await check("coachStats is null with no attendance recorded", async () => {
@@ -793,7 +793,7 @@ async function main() {
     const r = await markAttendance(sofia, cancelled.id, "NoShow", now);
     assert.equal(r.status, 409);
     const failed = await testDb.booking.create({
-      data: { memberId: fillers[2].id, gymClassId: sofiaClass.id, sessionDate: pastTuesday, status: "Failed" },
+      data: { memberId: fillers[2]!.id, gymClassId: sofiaClass.id, sessionDate: pastTuesday, status: "Failed", failureReason: "Class is full." },
     });
     assert.equal((await markAttendance(sofia, failed.id, "Completed", now)).status, 409);
   });
@@ -833,17 +833,17 @@ async function main() {
 
   await check("memberStats counts the month's attendance and upcoming bookings", async () => {
     const filler = fillers[4];
-    const asFiller: SessionUser = { id: filler.id, email: filler.email, fullName: filler.fullName, role: "Member" };
+    const asFiller: SessionUser = { id: filler!.id, email: filler!.email, fullName: filler!.fullName, role: "Member" };
 
-    const r = await memberStats(asFiller, filler.id, now);
+    const r = await memberStats(asFiller, filler!.id, now);
     assert.equal(r.status, 200, r.error);
     assert.ok(r.data!.upcoming >= 1, "seeded and test bookings in the future");
     assert.ok(r.data!.planStartedAt);
     assert.equal(typeof r.data!.attendedThisMonth, "number");
 
     // Someone else's stats are 404 for a member, readable for an admin.
-    assert.equal((await memberStats(asFiller, fillers[0].id, now)).status, 404);
-    assert.equal((await memberStats(admin, filler.id, now)).status, 200);
+    assert.equal((await memberStats(asFiller, fillers[0]!.id, now)).status, 404);
+    assert.equal((await memberStats(admin, filler!.id, now)).status, 200);
     assert.equal((await memberStats(admin, admin.id, now)).status, 404, "staff hold no membership");
 
     const noPlan = await newMember("noplan@example.co.za");

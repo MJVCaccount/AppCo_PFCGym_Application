@@ -501,7 +501,7 @@ export function timeAgo(isoDate: string, now = new Date()): string {
 /** JS getDay() is Sunday-first; the site is Monday-first. */
 export function todayKey(now = new Date()): DayKey {
   const map: DayKey[] = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
-  return map[now.getDay()];
+  return map[now.getDay()]!;
 }
 
 /**

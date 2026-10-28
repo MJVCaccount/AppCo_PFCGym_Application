@@ -1,7 +1,6 @@
 import "server-only";
 
-import { Prisma } from "@prisma/client";
-import type { MembershipPlan as PlanRow } from "@prisma/client";
+import type { MembershipPlan as PlanRow, Prisma } from "@prisma/client";
 import { cache } from "react";
 
 import { prisma } from "@/lib/prisma";

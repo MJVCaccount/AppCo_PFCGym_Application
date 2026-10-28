@@ -241,7 +241,7 @@ export async function reviewDocument(
       SELECT "status"::text AS "status" FROM "FighterDocument"
       WHERE "id" = ${id} FOR UPDATE`;
     if (locked.length === 0) return { ok: false, reason: "not-found" };
-    if (locked[0].status === decision) return { ok: false, reason: "unchanged" };
+    if (locked[0]?.status === decision) return { ok: false, reason: "unchanged" };
 
     const row = await tx.fighterDocument.update({
       where: { id },

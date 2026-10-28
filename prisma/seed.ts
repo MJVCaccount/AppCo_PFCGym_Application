@@ -383,7 +383,7 @@ async function main() {
   }
   await syncIdSequence("Review");
 
-  const basePlanId = plans[0].id;
+  const basePlanId = plans[0]!.id;
   const popularPlanId = plans.find((p) => p.pricePerMonth === 900)!.id;
   const topPlanId = plans.reduce((a, b) =>
     b.pricePerMonth > a.pricePerMonth ? b : a,

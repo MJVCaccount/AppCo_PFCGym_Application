@@ -81,7 +81,7 @@ async function withBookedCounts(
   );
 
   return rows.map((row, i) =>
-    toSlot(row, booked.get(key(row.id, sessions[i])) ?? 0),
+    toSlot(row, booked.get(key(row.id, sessions[i]!)) ?? 0),
   );
 }
 

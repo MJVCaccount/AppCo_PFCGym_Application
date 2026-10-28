@@ -53,6 +53,8 @@ export async function hitBucket(
       EXTRACT(EPOCH FROM (b."resetAt" - (now() AT TIME ZONE 'utc')))::double precision AS "secondsLeft"`;
 
   const row = rows[0];
+  if (!row) throw new Error("The rate-limit upsert returned no row.");
+
   return {
     count: row.count,
     retryAfterSeconds: Math.max(1, Math.ceil(row.secondsLeft)),
