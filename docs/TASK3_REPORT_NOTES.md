@@ -65,11 +65,11 @@ Completed or NoShow once the session date has arrived on Johannesburg's clock.
 The real pipeline diagram is in `README.md` (Deployment); `.github/workflows/ci.yml`
 and `deploy.yml` are the source. Branch protection rules and the `production`
 environment approval are GitHub settings, not repository files: copy them from
-Settings, Branches and Settings, Environments when you write the section.
+Settings, Branches and Settings, Environments when the section is written.
 
 ## 6. Running Costs (not filled in here)
 
-Needs figures from each vendor's pricing page **on the day you write it**, with
+Needs figures from each vendor's pricing page **on the day it is written**, with
 the page and the date cited: Neon, Vercel, both Vercel Blob stores, Resend.
 State the Resend limit of 100 emails a day as an assumption, and give the 100,
 1,000 and 10,000 user scenarios. Email volume per user comes from the app:
