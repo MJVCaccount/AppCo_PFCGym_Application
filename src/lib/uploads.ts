@@ -3,6 +3,7 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 
 import { del, get, put } from "@vercel/blob";
+import { inspectUpload } from "@/lib/uploadInspection";
 
 /**
  * File uploads: what is accepted, how it is checked, where it is stored.
@@ -110,7 +111,10 @@ export function contentTypeForPathname(pathname: string): string {
  */
 export function sanitizeFileName(name: unknown, fallback = "upload"): string {
   const base = typeof name === "string" ? name : "";
+  // A lone surrogate cannot be encoded for the Content-Disposition header
+  // (encodeURIComponent throws), so it becomes U+FFFD first.
   const cleaned = base
+    .toWellFormed()
     .normalize("NFC")
     .replace(/[\u0000-\u001f\u007f]/g, "")
     .replace(/[\\/:*?"<>|;,%]+/g, "_")
@@ -216,6 +220,9 @@ export async function readUpload(
   if (!mediaType || !limit.types.includes(mediaType)) {
     return refuse(415, `That file type is not allowed. Use a ${limit.label} file.`);
   }
+
+  const unsafe = inspectUpload(bytes, mediaType, kind);
+  if (unsafe) return refuse(400, unsafe);
 
   return {
     ok: true,
