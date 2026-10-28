@@ -34,6 +34,10 @@ interface Fake {
   /** After a promote, the project reports the new one only after this many checks. */
   lag: number;
   failPromote: number | null;
+  /** The next this many promotes are answered 409, then they succeed. */
+  conflicts: number;
+  /** Sent as Retry-After (seconds) on a 409. */
+  retryAfter: number | null;
   deployments: { uid: string; url: string; created: number }[];
   close(): Promise<void>;
 }
@@ -45,6 +49,8 @@ async function fakeVercel(): Promise<Fake> {
     pending: null as { id: string; checks: number } | null,
     lag: 0,
     failPromote: null as number | null,
+    conflicts: 0,
+    retryAfter: null as number | null,
     deployments: [
       { uid: "dpl_new", url: "new.vercel.app", created: 3 },
       { uid: "dpl_old", url: "old.vercel.app", created: 2 },
@@ -72,6 +78,11 @@ async function fakeVercel(): Promise<Fake> {
     }
     const promote = /^\/v10\/projects\/prj_1\/promote\/(.+)$/.exec(url.pathname);
     if (req.method === "POST" && promote) {
+      if (state.conflicts > 0 || state.failPromote === 409) {
+        if (state.conflicts > 0) state.conflicts--;
+        res.writeHead(409, { "content-type": "application/json", ...(state.retryAfter ? { "retry-after": String(state.retryAfter) } : {}) });
+        return res.end(JSON.stringify({ error: { code: "conflict", message: "secret detail that must not be printed" } }));
+      }
       if (state.failPromote) return send(state.failPromote, { error: { code: "forbidden", message: "secret detail that must not be printed" } });
       state.pending = { id: decodeURIComponent(promote[1]!), checks: state.lag };
       return send(201, {});
@@ -91,6 +102,10 @@ async function fakeVercel(): Promise<Fake> {
     set lag(v) { state.lag = v; },
     get failPromote() { return state.failPromote; },
     set failPromote(v) { state.failPromote = v; },
+    get conflicts() { return state.conflicts; },
+    set conflicts(v) { state.conflicts = v; },
+    get retryAfter() { return state.retryAfter; },
+    set retryAfter(v) { state.retryAfter = v; },
     deployments: state.deployments,
     close: () => new Promise((resolve) => server.close(() => resolve())),
   };
@@ -143,6 +158,53 @@ async function main() {
         assert.ok(!e.message.includes(TOKEN));
         return true;
       });
+      fake.failPromote = null;
+    });
+
+    const posts = () => fake.calls.filter((c) => c.method === "POST").length;
+
+    await check("a promote answered 409 is retried after a wait, using Retry-After when Vercel sends it, and then succeeds", async () => {
+      const waits: number[] = [];
+      const api = vercel.client(env(fake.url), { sleep: async (ms: number) => { waits.push(ms); } });
+      const before = posts();
+      fake.conflicts = 2;
+      await api.promote("dpl_old");
+      assert.equal(posts() - before, 3, "two refusals and one success");
+      assert.deepEqual(waits, [5000, 5000]);
+
+      waits.length = 0;
+      fake.conflicts = 1;
+      fake.retryAfter = 2;
+      await api.promote("dpl_old");
+      assert.deepEqual(waits, [2000], "Retry-After wins over the default wait");
+      fake.retryAfter = null;
+    });
+
+    await check("a permanent 409 fails after six retries without printing a body or the token", async () => {
+      const waits: number[] = [];
+      const api = vercel.client(env(fake.url), { sleep: async (ms: number) => { waits.push(ms); } });
+      const before = posts();
+      fake.failPromote = 409;
+      await assert.rejects(api.promote("dpl_old"), (e: Error) => {
+        assert.match(e.message, /409/);
+        assert.match(e.message, /conflict/);
+        assert.ok(!e.message.includes("secret detail"));
+        assert.ok(!e.message.includes(TOKEN));
+        return true;
+      });
+      assert.equal(posts() - before, 7, "the first try and six retries");
+      assert.equal(waits.length, 6);
+      fake.failPromote = null;
+    });
+
+    await check("any other refusal, such as 403, fails at once without a retry", async () => {
+      const waits: number[] = [];
+      const api = vercel.client(env(fake.url), { sleep: async (ms: number) => { waits.push(ms); } });
+      const before = posts();
+      fake.failPromote = 403;
+      await assert.rejects(api.promote("dpl_old"), /403/);
+      assert.equal(posts() - before, 1);
+      assert.equal(waits.length, 0);
       fake.failPromote = null;
     });
 
@@ -323,6 +385,17 @@ async function main() {
     assert.equal(drill.jobs.drill.environment, "production");
     assert.equal(drill.concurrency["cancel-in-progress"], false);
     assert.match(JSON.stringify(drill.jobs.drill.steps), /vercel-rollback\.mjs drill/);
+  });
+
+  await check("the drill summary always runs, says when there was no output, and on failure names the deployment to restore and the command", () => {
+    const steps = load("rollback-drill.yml").jobs.drill.steps;
+    const summary = steps.find((s: { name?: string }) => s.name === "Summary");
+    assert.ok(summary, "a Summary step");
+    assert.equal(summary.if, "always()");
+    assert.match(summary.run, /The drill produced no output\./);
+    assert.match(summary.run, /live now: /, "reads the id recorded before the drill");
+    assert.match(summary.run, /vercel promote \$LIVE_BEFORE/);
+    assert.ok(!/secrets\./.test(summary.run));
   });
 
   await check("the monitor runs every 15 minutes, opens one incident issue and closes it on recovery", () => {
