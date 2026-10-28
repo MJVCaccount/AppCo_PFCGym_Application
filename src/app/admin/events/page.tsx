@@ -46,7 +46,7 @@ export default async function AdminEventsPage({
     <>
       <div className="section-head">
         <p className="eyebrow">Admin</p>
-        <h2>Events</h2>
+        <h1>Events</h1>
         <p className="lead">Competitions, the bouts offered at them, and the results.</p>
       </div>
 

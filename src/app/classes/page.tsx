@@ -21,7 +21,7 @@ export default async function ClassesPage() {
         <div className="wrap">
           <div className="section-head">
             <p className="eyebrow">Training programmes</p>
-            <h2>All classes</h2>
+            <h1>All classes</h1>
             <p className="lead">
               Find the perfect class for your goals and experience level. Every
               class is open to members on any plan.

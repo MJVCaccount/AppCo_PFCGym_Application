@@ -47,7 +47,7 @@ export default async function CoachDashboard({
           <div className="section-head section-head--row">
             <div>
               <p className="eyebrow">Coach</p>
-              <h2>Your classes</h2>
+              <h1>Your classes</h1>
             </div>
             <form action={logout}>
               <button className="pill-link" type="submit">

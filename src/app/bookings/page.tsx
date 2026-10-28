@@ -57,7 +57,7 @@ export default async function BookingsPage({
         <div className="section-head section-head--row">
           <div>
             <p className="eyebrow">Account</p>
-            <h2>My bookings</h2>
+            <h1>My bookings</h1>
           </div>
           <Link className="pill-link" href="/timetable">
             Book a class &rarr;

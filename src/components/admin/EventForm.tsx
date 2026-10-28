@@ -20,6 +20,9 @@ interface Props {
  */
 export default function EventForm({ action, initial, submitLabel }: Props) {
   const [state, formAction] = useActionState(action, EMPTY_FORM_STATE);
+  // This form renders more than once on its page, so every field id is
+  // namespaced to the record being edited; see fieldIds in Field.tsx.
+  const scope = initial?.id ?? "new";
   const value = (name: string) => state.values?.[name] ?? initial?.[name];
   const error = (name: string) => state.errors?.[name];
 
@@ -27,9 +30,9 @@ export default function EventForm({ action, initial, submitLabel }: Props) {
     <form className="form form--split" action={formAction} noValidate>
       {initial?.id && <input type="hidden" name="id" value={initial.id} />}
 
-      <TextField name="name" label="Event name" defaultValue={value("name")} error={error("name")} />
-      <TextField name="venue" label="Venue" defaultValue={value("venue")} error={error("venue")} />
-      <TextField
+      <TextField scope={scope} name="name" label="Event name" defaultValue={value("name")} error={error("name")} />
+      <TextField scope={scope} name="venue" label="Venue" defaultValue={value("venue")} error={error("venue")} />
+      <TextField scope={scope}
         name="eventDate"
         label="Date and time"
         hint="(Johannesburg time)"
@@ -37,7 +40,7 @@ export default function EventForm({ action, initial, submitLabel }: Props) {
         defaultValue={value("eventDate")}
         error={error("eventDate")}
       />
-      <TextField
+      <TextField scope={scope}
         name="imageUrl"
         label="Poster link"
         hint="(optional)"
@@ -46,7 +49,7 @@ export default function EventForm({ action, initial, submitLabel }: Props) {
         error={error("imageUrl")}
       />
       <ImageUploadField label="Upload a poster" />
-      <TextField name="description" label="Description" multiline full defaultValue={value("description")} error={error("description")} />
+      <TextField scope={scope} name="description" label="Description" multiline full defaultValue={value("description")} error={error("description")} />
 
       {state.message && (
         <div className="field--full">

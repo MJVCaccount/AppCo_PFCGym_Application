@@ -51,7 +51,7 @@ export default async function AdminMembersPage({
     <>
       <div className="section-head">
         <p className="eyebrow">Admin</p>
-        <h2>Members</h2>
+        <h1>Members</h1>
         <p className="lead">Every account: members, fighters, coaches and administrators.</p>
       </div>
 
@@ -62,7 +62,6 @@ export default async function AdminMembersPage({
         <div className="field">
           <label htmlFor="f-q">Search by name or email</label>
           <input id="f-q" name="q" type="search" defaultValue={q} maxLength={100} />
-          <span className="error" role="alert" />
         </div>
         <button className="btn btn--red btn--sm" type="submit">
           Search

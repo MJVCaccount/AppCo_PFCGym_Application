@@ -120,7 +120,7 @@ async function FighterSections({ session }: { session: SessionUser }) {
     <>
       <div className="section-head">
         <p className="eyebrow">Fighter</p>
-        <h2>Your fight card</h2>
+        <h1>Your fight card</h1>
       </div>
 
       <article className="dash-card" style={{ marginBottom: 40 }}>

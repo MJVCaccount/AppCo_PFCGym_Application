@@ -63,7 +63,7 @@ export default async function AdminEventDetailPage({
     <>
       <div className="section-head">
         <p className="eyebrow">Admin · Event</p>
-        <h2>{event.name}</h2>
+        <h1>{event.name}</h1>
         <p className="lead">
           {formatEventDate(event.eventDate)} · {event.venue} · {event.status}
         </p>

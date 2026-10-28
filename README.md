@@ -11,6 +11,23 @@ actions and JSON routes, deployed to Vercel by GitHub Actions.
 
 ---
 
+## Live site
+
+https://pfc-gym.vercel.app
+
+## Demo Logins
+
+- Admin: admin@pfc.co.za / PfcAdmin-Cobalt-7391-Ring
+- Member: member@pfc.co.za / PfcDemo-Harbor-4826-Glove
+- Fighter: fighter@pfc.co.za / PfcDemo-Harbor-4826-Glove
+- Coach: marcus@pfc.co.za or sofia@pfc.co.za / PfcDemo-Harbor-4826-Glove
+
+## Presentation Youtube Link
+
+https://youtu.be/XglV1hx25q4?si=wn8EiDb5nlbrW2Yd
+
+---
+
 ## Running it
 
 Requires Node 20 or newer (what CI uses) and a PostgreSQL database.
@@ -473,4 +490,3 @@ Deployments, pick the last good one and choose "Promote to Production" (or run
 forward and are not undone, which is why the rule above matters: the old code
 has to keep working on the new schema. To undo a schema change, ship a new
 migration that reverses it.
-

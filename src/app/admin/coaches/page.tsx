@@ -39,7 +39,7 @@ export default async function AdminCoachesPage({
     <>
       <div className="section-head">
         <p className="eyebrow">Admin</p>
-        <h2>Coaches</h2>
+        <h1>Coaches</h1>
         <p className="lead">
           Archived coaches disappear from the public Coaches page; their history is kept.
         </p>

@@ -27,6 +27,9 @@ export default function ClassForm({
   submitLabel,
 }: Props) {
   const [state, formAction] = useActionState(action, EMPTY_FORM_STATE);
+  // This form renders more than once on its page, so every field id is
+  // namespaced to the record being edited; see fieldIds in Field.tsx.
+  const scope = initial?.id ?? "new";
   const value = (name: string) => state.values?.[name] ?? initial?.[name];
   const error = (name: string) => state.errors?.[name];
 
@@ -34,22 +37,22 @@ export default function ClassForm({
     <form className="form form--split" action={formAction} noValidate>
       {initial?.id && <input type="hidden" name="id" value={initial.id} />}
 
-      <TextField name="name" label="Class name" defaultValue={value("name")} error={error("name")} />
-      <SelectField
+      <TextField scope={scope} name="name" label="Class name" defaultValue={value("name")} error={error("name")} />
+      <SelectField scope={scope}
         name="kind"
         label="Kind"
         defaultValue={value("kind") ?? "Group"}
         error={error("kind")}
         options={CLASS_KINDS.map((kind) => ({ value: kind, label: kind }))}
       />
-      <SelectField
+      <SelectField scope={scope}
         name="coachId"
         label="Coach"
         defaultValue={value("coachId")}
         error={error("coachId")}
         options={coaches.map((c) => ({ value: String(c.id), label: c.name }))}
       />
-      <SelectField
+      <SelectField scope={scope}
         name="programmeId"
         label="Programme"
         required={false}
@@ -58,28 +61,28 @@ export default function ClassForm({
         error={error("programmeId")}
         options={programmes.map((p) => ({ value: String(p.id), label: p.name }))}
       />
-      <SelectField
+      <SelectField scope={scope}
         name="day"
         label="Day"
         defaultValue={value("day")}
         error={error("day")}
         options={DAY_ORDER.map((day) => ({ value: day, label: DAY_NAMES[day] }))}
       />
-      <TextField
+      <TextField scope={scope}
         name="startsAt"
         label="Starts at"
         type="time"
         defaultValue={value("startsAt")}
         error={error("startsAt")}
       />
-      <TextField
+      <TextField scope={scope}
         name="durationMinutes"
         label="Duration (minutes)"
         type="number"
         defaultValue={value("durationMinutes") ?? "60"}
         error={error("durationMinutes")}
       />
-      <TextField
+      <TextField scope={scope}
         name="capacity"
         label="Capacity"
         type="number"
