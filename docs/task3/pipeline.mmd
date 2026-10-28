@@ -1,6 +1,8 @@
-%% Source: .github/workflows/ci.yml, .github/workflows/deploy.yml, vercel.json (git deployment disabled).
-%% Not in the repository, so not verified: branch protection rules, and the required reviewer on the
+%% Source: .github/workflows/ci.yml, deploy.yml, monitor.yml, rollback-drill.yml, codeql.yml, scripts/ci/*.mjs, vercel.json (git deployment disabled).
+%% Not in the repository, so not verified: branch protection rules (proposed in docs/task3/branch-protection.md, not applied), and the required reviewer on the
 %% "production" GitHub Environment (deploy.yml names the environment; the approval is a GitHub setting).
+%% The monitoring, rollback, drain and scan workflows have not run on GitHub yet; they take effect when committed.
+%% Every `uses:` is pinned to a full commit SHA.
 flowchart TD
     PR["Pull request to develop or main"] --> CI
     PUSH["Push to develop or main"] --> CI
@@ -8,9 +10,14 @@ flowchart TD
     subgraph CI["CI workflow (ci.yml), cancels older runs of the same ref"]
         direction LR
         L["lint<br/>npm run lint"]
+        O["openapi<br/>lint + served JSON current"]
+        CQ["CodeQL (codeql.yml)<br/>javascript-typescript"]
+        GL["gitleaks<br/>whole git history"]
+        SG["semgrep<br/>OSS, metrics off, 4 packs"]
+        DR["dependency review<br/>(pull requests)"]
         T["typecheck<br/>npm run typecheck"]
         B["build<br/>npm run build (placeholder env)"]
-        TS["test<br/>Postgres 16 service<br/>create pfc_app, prisma migrate deploy,<br/>npm test on pfc_test"]
+        TS["test, Node 20 and 24<br/>Postgres 16 service, prisma migrate deploy,<br/>migration drift check, seed + db:verify,<br/>npm test (Node 24: npm run coverage)"]
         A["audit<br/>npm audit --omit=dev --audit-level=high"]
     end
 
@@ -25,9 +32,12 @@ flowchart TD
         APPROVAL --> P1["checkout head_sha CI passed on<br/>npm ci, install vercel CLI"]
         P1 --> P2["vercel pull --environment=production"]
         P2 --> P3["vercel build --prod"]
-        P3 --> P4["prisma migrate deploy<br/>(PROD_DIRECT_URL, before the code goes live)"]
+        P3 --> PR0["record the live production deployment id<br/>(Vercel REST API)"]
+        PR0 --> P4["prisma migrate deploy<br/>(PROD_DIRECT_URL, before the code goes live;<br/>forward-only)"]
         P4 --> P5["vercel deploy --prebuilt --prod"]
         P5 --> P6["smoke test: curl /api/health/ready<br/>retry 6 x 10 s"]
+        P6 -- fails --> RB["promote the recorded deployment back (REST API),<br/>wait until live, verify /api/health/ready on the domain"]
+        RB --> RF(["step summary, then the job fails"])
     end
 
     subgraph PV["preview job (develop)"]
@@ -42,5 +52,10 @@ flowchart TD
         V7 --> V8["smoke test: /api/health/ready"]
     end
 
-    P6 --> LIVE(["production live"])
+    P6 -- passes --> LIVE(["production live"])
+
+    OBX["outbox-drain.yml, hourly<br/>GET /api/cron/outbox<br/>(retries due emails)"] -.-> LIVE
+    MON["monitor.yml, every 15 min<br/>readiness, /api/health/detail thresholds"] --> ISS["one GitHub issue labelled incident:<br/>opened, updated, closed on recovery"]
+    LIVE -.-> MON
+    DRILL["rollback-drill.yml (manual,<br/>production approval)"] -.-> RB
     V8 --> PLIVE(["preview live"])

@@ -1,61 +1,58 @@
 flowchart TD
-%% Layering as it is in the code. Edges marked "direct" skip the service layer on purpose
-%% or by convention gap; each is listed in docs/AUDIT.md section 1 or verified below.
-%%
-%% Proof that only repositories import the Prisma client wrapper (run from the repo root):
-%%   grep -rln "lib/prisma\"" src | grep -v "^src/lib/repositories/"
-%%   -> no output (19 files match, all under src/lib/repositories/)
-%% Other files that mention @prisma/client in src/ (checked with
-%%   grep -rln "@prisma/client" src):
-%%   src/lib/prisma.ts      creates the client (the file the grep above is about)
-%%   src/lib/errors.ts      imports the Prisma error classes to map them, runs no query
-%% Everything else is under src/lib/repositories/.
-%% Tests may import prisma directly (tests/security.test.ts); that is not shipped code.
+%% Layering as it is in the code, and as tests/architecture.test.ts enforces it:
+%%   * only src/lib/services, src/lib/repositories, src/lib/session.ts and src/lib/rateLimit.ts
+%%     may import a repository (session.ts and rateLimit.ts use one narrow repository each, said in a comment)
+%%   * only src/lib/repositories may import src/lib/prisma.ts
+%% Pages, components, actions and routes reach data through a service. There are no "direct" edges.
+%% Tests may import repositories and prisma directly; that is not shipped code.
     subgraph UI["Pages, components, middleware (src/app, src/components, src/middleware.ts)"]
-        PG["page.tsx / layout.tsx<br/>e.g. src/app/dashboard/page.tsx,<br/>src/app/admin/classes/page.tsx"]
-        MW["src/middleware.ts<br/>cookie signature + role gate, CSP nonce"]
+        PG["page.tsx / layout.tsx<br/>e.g. src/app/dashboard/page.tsx,<br/>Header, Footer, StickyCta"]
+        MW["src/middleware.ts<br/>cookie signature + expiry + role gate, CSP nonce"]
     end
 
     subgraph ENTRY["Entry points that change state"]
         ACT["Server actions (src/actions)<br/>auth.ts, gym.ts, fighter.ts,<br/>coach.ts, admin.ts"]
-        RH["Route handlers (src/app/api/**/route.ts)<br/>19 files, JSON in/out"]
+        RH["Route handlers (src/app/api/**/route.ts)<br/>one apiHandler wrapper: request id, origin check,<br/>session, rate limit, error envelope, access log"]
+        OPS["Operator routes<br/>GET /api/health/detail (HEALTH_TOKEN)<br/>GET /api/cron/maintenance (CRON_SECRET)"]
     end
 
-    subgraph SVC["Services (src/lib/services)"]
+    subgraph SVC["Services (src/lib/services) - all return ServiceResult"]
         S1["bookingService, membershipService,<br/>coachService, eventService,<br/>fighterService, documentService,<br/>imageService, contactService"]
-        S2["classAdminService, coachAdminService,<br/>memberAdminService, planAdminService,<br/>auditService, passwordService, inviteService"]
-        S3["notificationService<br/>(queues email via src/lib/email/queue.ts)"]
+        S2["classAdminService, coachAdminService,<br/>memberAdminService, planAdminService,<br/>auditService, passwordService, inviteService,<br/>erasureService"]
+        S4["authService, catalogueService,<br/>timetableService, dashboardService,<br/>healthService, maintenanceService"]
+        S3["notificationService -> outboxService<br/>(stored first, sent second, retried, capped)"]
     end
 
     subgraph REPO["Repositories (src/lib/repositories) - the only importers of src/lib/prisma.ts"]
         R1["bookingsRepository, timetableRepository,<br/>classAdminRepository, programmesRepository,<br/>coachesRepository, attendanceRepository"]
         R2["usersRepository, plansRepository,<br/>fightersRepository, eventsRepository,<br/>participationsRepository, documentsRepository"]
-        R3["passwordResetRepository, rateLimitRepository,<br/>auditRepository, contactRepository,<br/>reviewsRepository, hoursRepository, healthRepository"]
+        R3["passwordResetRepository, rateLimitRepository,<br/>auditRepository, contactRepository,<br/>reviewsRepository, hoursRepository,<br/>healthRepository, outboxRepository"]
     end
 
-    PRISMA["src/lib/prisma.ts<br/>PrismaClient singleton"]
+    PRISMA["src/lib/prisma.ts<br/>PrismaClient singleton + slow-query warning"]
     DB[("PostgreSQL<br/>prisma/schema.prisma")]
 
     subgraph SUPPORT["Cross-cutting helpers (no database access of their own)"]
         SES["session.ts / sessionToken.ts<br/>(session.ts reads the account via usersRepository)"]
         RL["rateLimit.ts<br/>(reads/writes via rateLimitRepository)"]
-        UP["uploads.ts -> @vercel/blob"]
+        UP["uploads.ts + uploadInspection.ts -> @vercel/blob"]
         EM["email/send.ts -> Resend"]
-        OR["origin.ts, json.ts, csp.ts, returnUrl.ts"]
+        OR["origin.ts, json.ts, csp.ts, returnUrl.ts,<br/>apiEnvelope.ts, requestContext.ts, bearer.ts"]
     end
 
     MW -. "decodeSession only, no DB" .-> SES
     PG --> ACT
     PG --> S1
-    PG -- "direct: public read-only data<br/>(classes, coaches, plans, timetable pages,<br/>Header, Footer, StickyCta)" --> R1
-    PG -- "direct" --> R2
+    PG --> S4
     ACT --> S1
     ACT --> S2
-    ACT -- "direct: auth.ts login/register<br/>(usersRepository, plansRepository)" --> R2
+    ACT --> S4
     RH --> S1
     RH --> S2
-    RH -- "direct: GET /api/classes, /api/timetable,<br/>/api/health/ready" --> R1
+    RH --> S4
+    OPS --> S4
     RH --> OR
+    OPS --> OR
     ACT --> RL
     RH --> RL
     ACT --> SES
@@ -65,9 +62,15 @@ flowchart TD
     S2 --> R1
     S2 --> R2
     S2 --> R3
+    S4 --> R1
+    S4 --> R2
+    S4 --> R3
     S1 --> S3
     S2 --> S3
+    S4 --> S3
+    S3 --> R3
     S1 --> UP
+    S2 --> UP
     S3 --> EM
     R1 --> PRISMA
     R2 --> PRISMA

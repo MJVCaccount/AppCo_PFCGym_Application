@@ -1,11 +1,16 @@
 # API reference
 
-Source: the 19 `route.ts` files under `src/app/api/` (run `find src/app/api -name route.ts` to list them), the services they call, and `src/lib/api.ts`. The who-may-call table with ownership rules is in [authorisation-matrix.md](authorisation-matrix.md); the older route table is in [../AUDIT.md](../AUDIT.md) section 3.
+The machine-readable version of this page is [../openapi.yaml](../openapi.yaml) (OpenAPI 3.1; also served at `GET /api/openapi.json` and rendered to the static [../api.html](../api.html)). `tests/openapi.test.ts` fails when a route or method is missing from the spec or the spec lists one that does not exist, and checks real responses against the schemas. This page is the prose companion.
+
+Source: the 25 `route.ts` files under `src/app/api/` (24 routes and the catch-all) (run `find src/app/api -name route.ts` to list them), the services they call, and `src/lib/api.ts`. The who-may-call table with ownership rules is in [authorisation-matrix.md](authorisation-matrix.md); the older route table is in [../AUDIT.md](../AUDIT.md) section 3.
 
 ## Conventions (all routes)
 
 * Success: `{ "data": ... }` with the status shown. One exception: `POST /api/admin/uploads/image` answers `{ "url": ... }` (`src/app/api/admin/uploads/image/route.ts`).
-* Error: `{ "error": { "message": "..." } }` (`jsonError`, `src/lib/api.ts`). Nothing thrown reaches the client; a failure is a fixed sentence with status 500.
+* Error: `{ "error": { "message": "...", "code": "NOT_FOUND", "requestId": "..." } }` (`jsonError`, `src/lib/apiEnvelope.ts`). `code` is stable (`INVALID_REQUEST`, `UNAUTHENTICATED`, `FORBIDDEN`, `CROSS_ORIGIN`, `NOT_FOUND`, `METHOD_NOT_ALLOWED`, `CONFLICT`, `PAYLOAD_TOO_LARGE`, `UNSUPPORTED_MEDIA_TYPE`, `RATE_LIMITED`, `INTERNAL`, `STORAGE_ERROR`, `UNAVAILABLE`); `message` is for people; `requestId` equals the `X-Request-Id` response header and the server log line. The two health routes keep their `{ "status" }` bodies.
+* **Every response** carries `X-Request-Id` (an incoming one is kept if it is 8 to 64 characters of letters, digits, `.`, `_`, `-`; otherwise a new UUID) and `Cache-Control`. The default is `no-store`; `GET /api/classes` and `GET /api/events` send `public, s-maxage=60, stale-while-revalidate=300`; `GET /api/openapi.json` sends `public, s-maxage=3600, stale-while-revalidate=86400`. Errors are never cached.
+* **One wrapper** (`publicRoute` / `userRoute` in `src/lib/apiHandler.ts`) runs every route: request id, same-origin check on writes, session, optional rate limit, the route, then headers and one access-log line (`method`, `route`, `status`, `ms`, `requestId`) with no query string or body.
+* **Unknown paths** under `/api` answer a JSON 404 (`src/app/api/[...path]/route.ts`). **A wrong method** on a real route answers a JSON 405 with an `Allow` header (`methodNotAllowed`). Nothing thrown reaches the client; a failure is a fixed sentence with status 500.
 * **State-changing requests (POST, PATCH, DELETE)** must carry an `Origin` (or `Referer`) whose host equals the host of `APP_URL`, otherwise **403** `Cross-origin requests are not allowed.` (`src/lib/origin.ts`). This check runs before the session check.
 * **JSON bodies** (`readJson`, `src/lib/json.ts`): `Content-Type: application/json` else **415**; more than 100,000 bytes (declared or counted) else **413**; unreadable or invalid JSON else **400**; for routes that need an object (`readJsonObject`), an array, string or number is **400** `Request body must be a JSON object.`
 * **Auth** is the signed `pfc_session` cookie, checked against the database on each request (`getSession`). No valid session is **401** `Sign in to continue.` (`withSession`) or a route-specific sentence for the two booking routes. A signed-in caller with the wrong role gets **403** from the service, except where an id belongs to someone else, which is **404**.
@@ -25,12 +30,14 @@ Shapes named below (`TimetableSlot`, `Booking`, `BoutOffer`, `CompetitionEvent`,
 | `GET /api/health/ready` | none | 200 `{ "status": "ok" }` | 503 `{ "status": "unavailable" }` (database unreachable; no detail) |
 | `GET /api/classes` | none | 200 `{ data: ClassProgramme[] }` | 500 `Could not load classes.` |
 | `GET /api/timetable` | query `day` optional: `mon`..`sun` | 200 `{ data: TimetableSlot[] }` (the week, or one day) | 400 `day must be one of: ...`; 500 `Could not load the timetable.` |
+| `GET /api/openapi.json` | none | 200 the OpenAPI 3.1 document | none |
 | `GET /api/events` | none | 200 `{ data: CompetitionEvent[] }` Scheduled, future, soonest first | 500 `Could not load events.` |
 
 ## Bookings (Member or Fighter)
 
 | Method and path | Request | Success | Error statuses |
 | --- | --- | --- | --- |
+| `GET /api/bookings` | none | 200 `{ data: { upcoming: Booking[], past: Booking[] } }` (upcoming soonest first; past newest first; a confirmed booking whose day has passed reads as `Completed`) | 401 `Sign in to see your bookings.`; 403 coach or admin (`Only members have bookings.`); 500 `Could not load your bookings.` |
 | `POST /api/bookings` | JSON `{ "slotId": number }` | **201** `{ data: TimetableSlot }` (refreshed `booked` count) | 401 `Sign in to book a class.`; 403 foreign origin, or coach/admin (`Only members can book classes.`), or no plan (`An active membership plan is required to book a class.`); 429 (30 per 10 min per user); 415; 413; 400 invalid JSON, or `slotId` missing or not a positive integer (`slotId must be a positive integer.`); 404 class missing or inactive; 409 already booked, or class full (a `Failed` row is written); 500 `Could not complete the booking.` |
 | `POST /api/bookings/:id/cancel` | no body | 200 `{ data: Booking }` (status `Cancelled`) | 401 `Sign in to cancel a booking.`; 403 foreign origin; 400 id not a positive integer; 404 not your booking, missing, or caller is staff; 409 not Confirmed, or class already started; 500 `Could not cancel the booking.` |
 
@@ -40,6 +47,7 @@ Shapes named below (`TimetableSlot`, `Booking`, `BoutOffer`, `CompetitionEvent`,
 | --- | --- | --- | --- |
 | `GET /api/fighter/offers` | none | 200 `{ data: FighterOffers }` (`fighter`, `pending`, `accepted`, `declined`, `past`) | 401; 403 `Only fighters have bout offers.`; 404 no fighter profile; 500 `Could not load your offers.` |
 | `POST /api/fighter/offers/:id/respond` | JSON `{ "response": "Accepted" \| "Declined" }` | 200 `{ data: BoutOffer }` | 401; 403 foreign origin, or not a fighter; 415; 413; 400 bad id, or response not Accepted/Declined; 404 offer is not yours or missing; 409 event no longer open (cancelled or date passed); 500 `Could not save your answer.` |
+| `GET /api/fighter/documents` | none | 200 `{ data: FighterDocument[] }` newest first; never includes where a file is stored | 401; 403 not a fighter; 500 `Could not load your documents.` |
 | `POST /api/fighter/documents` | multipart: `type` = `Medical` \| `Licence` \| `Other`, `file` (PDF, JPEG or PNG, at most 4 MB by real size and real type) | **201** `{ data: FighterDocument }` (status `Pending`) | 401; 403 foreign origin, or not a fighter; 429 (20 per hour per user); 413 over 4 MB; 415 not PDF/JPEG/PNG by magic bytes; 400 not multipart, no file, empty file, bad `type`; 409 already 10 documents; 502 storage error; 503 private store not configured (`File storage is not available right now. Please try again later.`); 500 `Could not save your document.` |
 | `DELETE /api/fighter/documents/:id` | no body | 200 `{ data: { id } }` | 401; 403 foreign origin, or not a fighter; 404 not yours, missing or bad id; 409 `An approved document cannot be deleted.`; 500 `Could not delete the document.` |
 | `GET /api/documents/:id` | none | 200 file stream. Headers: `Content-Type` from the stored extension, `Content-Disposition: attachment`, `X-Content-Type-Options: nosniff`, `Cache-Control: private, no-store` | 401; 404 for every case except owner-Fighter or Admin (missing, someone else's, member, coach, bad id, blob missing); 502 / 503 storage error; 500 `Could not open the document.` |
