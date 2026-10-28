@@ -29,7 +29,9 @@ export const MAX_NAME = 100;
 export const MAX_EMAIL = 254;
 export const MAX_PHONE = 30;
 export const MAX_MESSAGE = 2000;
-export const MAX_PASSWORD = 128;
+export { MAX_PASSWORD };
+
+import { checkPassword, isPasswordLengthAcceptable, MAX_PASSWORD } from "@/lib/passwordPolicy";
 
 function lengthBetween(value: string, min: number, max: number): boolean {
   const length = value.trim().length;
@@ -59,15 +61,21 @@ export const RULES = {
       : "Enter a valid phone number, or leave it blank.";
   },
 
+  /** Choosing a password: registration and reset. See passwordPolicy.ts. */
   password(value: string): string | null {
-    // The ceiling matters: scrypt on an enormous string is a way to tie the
-    // server up.
+    return checkPassword(value);
+  },
+
+  /**
+   * Signing in. Only the ceiling is enforced (scrypt on an enormous string
+   * ties the server up); accounts made under the old 8-character rule must
+   * still be able to sign in.
+   */
+  loginPassword(value: string): string | null {
     if (value.length > MAX_PASSWORD) {
       return `Password must be at most ${MAX_PASSWORD} characters.`;
     }
-    return value.length >= 8
-      ? null
-      : "Password must be at least 8 characters.";
+    return isPasswordLengthAcceptable(value) ? null : "Enter your password.";
   },
 
   message(value: string): string | null {

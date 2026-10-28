@@ -1,7 +1,6 @@
 import "server-only";
 
 import { hasSessionStarted } from "@/lib/dates";
-import { mapPrismaError } from "@/lib/errors";
 import {
   cancelBooking as cancelRow,
   createBooking as insertBooking,
@@ -10,8 +9,15 @@ import {
 import { getSlot } from "@/lib/repositories/timetableRepository";
 import { notifyBookingConfirmed } from "@/lib/services/notificationService";
 import {
+  fail,
+  failure,
+  isValidId,
+  succeed,
+} from "@/lib/services/serviceResult";
+import {
   type Booking,
   isMemberRole,
+  type ServiceResult,
   type SessionUser,
   type TimetableSlot,
 } from "@/lib/types";
@@ -24,12 +30,10 @@ import {
  * tested directly (see tests/api.test.ts) — only the API routes and the
  * server actions need a real request to resolve the session.
  */
-export interface BookingResult {
-  ok: boolean;
-  status: number;
-  error?: string;
-  slot?: TimetableSlot;
-  booking?: Booking;
+export interface BookedClass {
+  /** The class as it stands after the booking; undefined if it was removed in between. */
+  slot: TimetableSlot | undefined;
+  booking: Booking;
 }
 
 export interface MyBookings {
@@ -39,12 +43,6 @@ export interface MyBookings {
   past: Booking[];
 }
 
-const MAX_ID = 2_147_483_647; // Postgres INTEGER
-
-function isValidId(id: number): boolean {
-  return Number.isInteger(id) && id > 0 && id <= MAX_ID;
-}
-
 const NOT_FOUND_CLASS = "That class could not be found.";
 const NOT_FOUND_BOOKING = "That booking could not be found.";
 
@@ -52,14 +50,14 @@ export async function createBooking(
   session: SessionUser,
   classId: number,
   now: Date = new Date(),
-): Promise<BookingResult> {
+): Promise<ServiceResult<BookedClass>> {
   // A booking belongs to a Member row, which coaches and admins do not have.
   if (!isMemberRole(session.role)) {
-    return { ok: false, status: 403, error: "Only members can book classes." };
+    return fail(403, "Only members can book classes.");
   }
 
   if (!isValidId(classId)) {
-    return { ok: false, status: 400, error: "slotId must be a positive integer." };
+    return fail(400, "slotId must be a positive integer.");
   }
 
   try {
@@ -68,40 +66,25 @@ export async function createBooking(
     if (!result.ok) {
       switch (result.reason) {
         case "class-not-found":
-          return { ok: false, status: 404, error: NOT_FOUND_CLASS };
+          return fail(404, NOT_FOUND_CLASS);
         case "no-plan":
-          return {
-            ok: false,
-            status: 403,
-            error: "An active membership plan is required to book a class.",
-          };
+          return fail(403, "An active membership plan is required to book a class.");
         case "duplicate":
-          return {
-            ok: false,
-            status: 409,
-            error: "You are already booked into this class.",
-          };
+          return fail(409, "You are already booked into this class.");
         case "full":
-          return {
-            ok: false,
-            status: 409,
-            error: `${result.className} at ${result.startsAt} is fully booked.`,
-          };
+          return fail(409, `${result.className} at ${result.startsAt} is fully booked.`);
       }
     }
 
     // Told after the response, and only once the booking is committed.
     notifyBookingConfirmed(session, result.booking);
 
-    return {
-      ok: true,
-      status: 201,
-      slot: await getSlot(classId, now),
-      booking: result.booking,
-    };
+    return succeed(
+      { slot: await getSlot(classId, now), booking: result.booking },
+      201,
+    );
   } catch (e) {
-    const error = mapPrismaError(e);
-    return { ok: false, status: error.status, error: error.message };
+    return failure(e);
   }
 }
 
@@ -109,20 +92,14 @@ export async function cancelBooking(
   session: SessionUser,
   bookingId: number,
   now: Date = new Date(),
-): Promise<BookingResult> {
+): Promise<ServiceResult<Booking>> {
   if (!isValidId(bookingId)) {
-    return {
-      ok: false,
-      status: 400,
-      error: "bookingId must be a positive integer.",
-    };
+    return fail(400, "bookingId must be a positive integer.");
   }
 
   // Staff hold no bookings, so for them every id is "not found" — the same
   // answer a member gets for someone else's booking.
-  if (!isMemberRole(session.role)) {
-    return { ok: false, status: 404, error: NOT_FOUND_BOOKING };
-  }
+  if (!isMemberRole(session.role)) return fail(404, NOT_FOUND_BOOKING);
 
   try {
     const result = await cancelRow(session.id, bookingId, now);
@@ -130,26 +107,31 @@ export async function cancelBooking(
     if (!result.ok) {
       switch (result.reason) {
         case "not-found":
-          return { ok: false, status: 404, error: NOT_FOUND_BOOKING };
+          return fail(404, NOT_FOUND_BOOKING);
         case "not-confirmed":
-          return {
-            ok: false,
-            status: 409,
-            error: "Only a confirmed booking can be cancelled.",
-          };
+          return fail(409, "Only a confirmed booking can be cancelled.");
         case "started":
-          return {
-            ok: false,
-            status: 409,
-            error: "This class has already started.",
-          };
+          return fail(409, "This class has already started.");
       }
     }
 
-    return { ok: true, status: 200, booking: result.booking };
+    return succeed(result.booking);
   } catch (e) {
-    const error = mapPrismaError(e);
-    return { ok: false, status: error.status, error: error.message };
+    return failure(e);
+  }
+}
+
+/** listMyBookings as a result: staff hold no bookings, so for them it is a 403. */
+export async function getMyBookings(
+  session: SessionUser,
+  now: Date = new Date(),
+): Promise<ServiceResult<MyBookings>> {
+  if (!isMemberRole(session.role)) return fail(403, "Only members have bookings.");
+
+  try {
+    return succeed(await listMyBookings(session, now));
+  } catch (e) {
+    return failure(e);
   }
 }
 

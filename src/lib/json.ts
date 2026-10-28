@@ -1,6 +1,8 @@
 import "server-only";
 
-import { NextResponse } from "next/server";
+import type { NextResponse } from "next/server";
+
+import { jsonError } from "@/lib/apiEnvelope";
 
 /**
  * Reads a JSON request body with the checks a route should always make:
@@ -18,7 +20,7 @@ export const DEFAULT_JSON_MAX_BYTES = 100_000;
 function reject(status: number, message: string): JsonRead {
   return {
     ok: false,
-    response: NextResponse.json({ error: { message } }, { status }),
+    response: jsonError(message, status),
   };
 }
 
@@ -27,7 +29,7 @@ export async function readJson(
   maxBytes: number = DEFAULT_JSON_MAX_BYTES,
 ): Promise<JsonRead> {
   const contentType = request.headers.get("content-type") ?? "";
-  const mediaType = contentType.split(";")[0].trim().toLowerCase();
+  const mediaType = (contentType.split(";")[0] ?? "").trim().toLowerCase();
   if (mediaType !== "application/json") {
     return reject(415, "Content-Type must be application/json.");
   }

@@ -1,15 +1,18 @@
 import "server-only";
 
-import { mapPrismaError } from "@/lib/errors";
 import { getPlan } from "@/lib/repositories/plansRepository";
 import {
   cancelMembership as clearPlan,
+  findById,
   setPlan,
 } from "@/lib/repositories/usersRepository";
+import { fail, failure, succeed } from "@/lib/services/serviceResult";
 import {
   isMemberRole,
   type MembershipPlan,
+  type ServiceResult,
   type SessionUser,
+  type UserAccount,
 } from "@/lib/types";
 
 /**
@@ -19,13 +22,6 @@ import {
  * be tested without a request. Only the account's own member may change it:
  * the id always comes from the session, never from the form.
  */
-export interface MembershipResult {
-  ok: boolean;
-  status: number;
-  error?: string;
-  plan?: MembershipPlan;
-}
-
 const STAFF_ERROR = "Staff accounts do not hold a membership.";
 const NO_PLAN_ERROR = "That plan could not be found.";
 const NO_MEMBER_ERROR = "That membership could not be found.";
@@ -33,44 +29,51 @@ const NO_MEMBER_ERROR = "That membership could not be found.";
 export async function changePlan(
   session: SessionUser,
   planId: number,
-): Promise<MembershipResult> {
-  if (!isMemberRole(session.role)) {
-    return { ok: false, status: 403, error: STAFF_ERROR };
-  }
+): Promise<ServiceResult<MembershipPlan>> {
+  if (!isMemberRole(session.role)) return fail(403, STAFF_ERROR);
 
   try {
     const plan = await getPlan(planId);
-    if (!plan) return { ok: false, status: 404, error: NO_PLAN_ERROR };
+    if (!plan) return fail(404, NO_PLAN_ERROR);
 
     const outcome = await setPlan(session.id, planId);
-    if (outcome === "no-plan") {
-      return { ok: false, status: 404, error: NO_PLAN_ERROR };
-    }
-    if (outcome === "no-member") {
-      return { ok: false, status: 404, error: NO_MEMBER_ERROR };
-    }
+    if (outcome === "no-plan") return fail(404, NO_PLAN_ERROR);
+    if (outcome === "no-member") return fail(404, NO_MEMBER_ERROR);
 
-    return { ok: true, status: 200, plan };
+    return succeed(plan);
   } catch (e) {
-    const error = mapPrismaError(e);
-    return { ok: false, status: error.status, error: error.message };
+    return failure(e);
   }
 }
 
 export async function cancelMembership(
   session: SessionUser,
-): Promise<MembershipResult> {
-  if (!isMemberRole(session.role)) {
-    return { ok: false, status: 403, error: STAFF_ERROR };
-  }
+): Promise<ServiceResult<null>> {
+  if (!isMemberRole(session.role)) return fail(403, STAFF_ERROR);
 
   try {
     const cancelled = await clearPlan(session.id);
-    if (!cancelled) return { ok: false, status: 404, error: NO_MEMBER_ERROR };
+    if (!cancelled) return fail(404, NO_MEMBER_ERROR);
 
-    return { ok: true, status: 200 };
+    return succeed(null);
   } catch (e) {
-    const error = mapPrismaError(e);
-    return { ok: false, status: error.status, error: error.message };
+    return failure(e);
   }
+}
+
+/**
+ * The account and the plan it is on, for the pages that show "your plan". A
+ * plan since retired is still returned, so a member sees what they hold.
+ */
+export async function getMembership(
+  userId: number,
+): Promise<{ user: UserAccount | undefined; plan: MembershipPlan | undefined }> {
+  const user = await findById(userId);
+  const planId = user?.planId;
+  const plan =
+    planId === undefined || planId === null
+      ? undefined
+      : await getPlan(planId, { includeInactive: true });
+
+  return { user, plan };
 }

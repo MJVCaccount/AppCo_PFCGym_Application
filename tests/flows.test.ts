@@ -56,7 +56,6 @@ import {
   listMyDocuments,
   openDocument,
   reviewDocument,
-  uploadFighterDocument,
 } from "../src/lib/services/documentService";
 import {
   createEvent,
@@ -220,7 +219,7 @@ async function main() {
   process.env.APP_URL = ORIGIN;
   process.env.RESEND_API_KEY = "re_test_key";
   process.env.EMAIL_FROM = "PFC <no-reply@test.pfc.invalid>";
-  process.env.CONTACT_INBOX = "inbox@test.pfc.invalid";
+  process.env.CONTACT_INBOX = "inbox@test.pfc.example";
   process.env.PUBLIC_BLOB_STORE_ID = "public-store-id";
   process.env.PRIVATE_BLOB_STORE_ID = "private-store-id";
   delete (process.env as Record<string, string | undefined>).RATE_LIMIT_MULTIPLIER;
@@ -245,13 +244,13 @@ async function main() {
       ["timetable", () => timetableGet(new Request("http://localhost/api/timetable"))],
       ["events", eventsGet],
     ] as const) {
-      const response = await handler();
+      const response = await handler(new Request("http://localhost/api/test"));
       assert.equal(response.status, 200, label);
       const data = (await bodyOf(response)).data as unknown[];
       assert.ok(Array.isArray(data) && data.length > 0, `${label} has rows`);
     }
-    assert.equal((await healthGet()).status, 200);
-    assert.equal((await readyGet()).status, 200);
+    assert.equal((await healthGet(new Request("http://localhost/api/test"))).status, 200);
+    assert.equal((await readyGet(new Request("http://localhost/api/test"))).status, 200);
 
     assert.ok((await getClasses()).length > 0);
     assert.ok((await getCoaches()).length > 0);
@@ -264,7 +263,7 @@ async function main() {
   const protectedCalls = (): [string, () => Promise<Response>][] => [
     ["POST /api/bookings", () => bookRoute(jsonRequest("POST", { slotId: 1 }))],
     ["POST /api/bookings/:id/cancel", () => cancelRoute(jsonRequest("POST"), params(1))],
-    ["GET /api/fighter/offers", () => offersGet()],
+    ["GET /api/fighter/offers", () => offersGet(new Request("http://localhost/api/test"))],
     ["POST /api/fighter/offers/:id/respond", () => respondRoute(jsonRequest("POST", { response: "Accepted" }), params(1))],
     ["POST /api/fighter/documents", () => fighterDocsPost(multipart({ type: "Medical" }, { bytes: pdf(), name: "a.pdf", type: "application/pdf" }))],
     ["DELETE /api/fighter/documents/:id", () => fighterDocDelete(jsonRequest("DELETE"), params(1))],
@@ -290,10 +289,10 @@ async function main() {
   await check("a forged cookie is rejected on every protected route and by the page gate", async () => {
     const real = encodeSession(demoMember, 0);
     const [payload, signature] = real.split(".");
-    const claims = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as Record<string, unknown>;
+    const claims = JSON.parse(Buffer.from(payload!, "base64url").toString("utf8")) as Record<string, unknown>;
 
     const promoted = Buffer.from(JSON.stringify({ ...claims, role: "Admin" })).toString("base64url");
-    const otherKey = createHmac("sha256", "another-secret-another-secret-0123456789").update(payload).digest("base64url");
+    const otherKey = createHmac("sha256", "another-secret-another-secret-0123456789").update(payload!).digest("base64url");
     const noSuchUser = encodeSession({ id: 987654, email: "ghost@example.co.za", fullName: "Ghost", role: "Admin" }, 0);
     const wrongVersion = encodeSession(demoMember, 99);
 
@@ -303,7 +302,7 @@ async function main() {
     const forgeries: [string, string, boolean][] = [
       ["role edited, old signature", `${promoted}.${signature}`, false],
       ["signed with another key", `${payload}.${otherKey}`, false],
-      ["no signature", payload, false],
+      ["no signature", payload!, false],
       ["garbage", "not-a-cookie", false],
       ["empty", "", false],
       ["signed, but for an account that does not exist", noSuchUser, true],
@@ -409,9 +408,9 @@ async function main() {
     outbox.length = 0;
     const booked = await createBooking(newMember, slotId, now);
     assert.equal(booked.status, 201, booked.error);
-    firstBookingId = booked.booking!.id;
-    assert.equal(booked.booking?.status, "Confirmed");
-    assert.equal(booked.slot?.id, slotId);
+    firstBookingId = booked.data!.booking.id;
+    assert.equal(booked.data?.booking.status, "Confirmed");
+    assert.equal(booked.data?.slot?.id, slotId);
 
     const mine = await listMyBookings(newMember, now);
     assert.ok(mine.upcoming.some((b) => b.id === firstBookingId && b.status === "Confirmed"));
@@ -438,7 +437,7 @@ async function main() {
 
     const rebooked = await createBooking(newMember, slotId, now);
     assert.equal(rebooked.status, 201, rebooked.error);
-    assert.equal(rebooked.booking?.id, firstBookingId, "the cancelled row is reused");
+    assert.equal(rebooked.data?.booking.id, firstBookingId, "the cancelled row is reused");
     assert.equal(await testDb.booking.count({ where: { memberId: newMember.id, gymClassId: slotId } }), 1);
     assert.equal((await testDb.booking.findUniqueOrThrow({ where: { id: firstBookingId } })).status, "Confirmed");
     await signOut();
@@ -484,7 +483,7 @@ async function main() {
 
     const booked = await createBooking(demoMember, full.id, now);
     assert.equal(booked.status, 201, booked.error);
-    assert.equal(booked.booking?.id, failed.id, "the Failed row is reused");
+    assert.equal(booked.data?.booking.id, failed.id, "the Failed row is reused");
     const after = await testDb.booking.findUniqueOrThrow({ where: { id: failed.id } });
     assert.equal(after.status, "Confirmed");
     assert.equal(after.failureReason, null);
@@ -508,9 +507,9 @@ async function main() {
     assert.equal(offers.status, 200);
     assert.equal(offers.data?.pending.length, 1);
     const offer = offers.data!.pending[0];
-    offerId = offer.id;
-    assert.equal(offer.eventName, "PFC Fight Night");
-    assert.equal(offer.availability, "Pending");
+    offerId = offer!.id;
+    assert.equal(offer!.eventName, "PFC Fight Night");
+    assert.equal(offer!.availability, "Pending");
 
     const accepted = await respondToOffer(demoFighter, offerId, "Accepted", now);
     assert.equal(accepted.status, 200, accepted.error);
@@ -742,7 +741,7 @@ async function main() {
     assert.ok(outbox.some((m) => m.to === demoFighter.email && /approved/.test(m.subject)));
 
     assert.equal((await reviewDocument(admin, documentId, "Approved", null, now)).status, 409, "approving twice");
-    assert.equal((await listMyDocuments(demoFighter)).data?.[0].status, "Approved");
+    assert.equal((await listMyDocuments(demoFighter)).data?.[0]!.status, "Approved");
     assert.equal((await deleteMyDocument(demoFighter, documentId)).status, 409);
 
     assert.equal((await reviewDocument(demoFighter, documentId, "Rejected", "no", now)).status, 403, "a fighter cannot review");

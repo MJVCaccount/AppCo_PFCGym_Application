@@ -1,11 +1,6 @@
-import {
-  jsonResult,
-  pathId,
-  readJsonObject,
-  withSession,
-} from "@/lib/api";
+import { jsonResult, pathId, readJsonObject } from "@/lib/api";
+import { methodNotAllowed, userRoute } from "@/lib/apiHandler";
 import { respondToOffer } from "@/lib/services/eventService";
-import { assertSameOrigin } from "@/lib/origin";
 
 export const dynamic = "force-dynamic";
 
@@ -15,25 +10,21 @@ export const dynamic = "force-dynamic";
  * The HTTP counterpart to `respondToOfferAction` in actions/fighter.ts.
  * Someone else's offer answers 404, the same as one that does not exist.
  */
-export async function POST(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> },
-) {
-  const blocked = assertSameOrigin(request);
-  if (blocked) return blocked;
+export const POST = userRoute(
+  {
+    name: "POST /api/fighter/offers/[id]/respond",
+    failure: "Could not save your answer.",
+    limit: "respond",
+  },
+  async ({ request, session, params }) => {
+    const read = await readJsonObject(request);
+    if (!read.ok) return read.response;
 
-  return withSession(
-    "POST /api/fighter/offers/[id]/respond",
-    "Could not save your answer.",
-    async (session) => {
-      const read = await readJsonObject(request);
-      if (!read.ok) return read.response;
-      const body = read.body;
+    const { id } = await params();
+    return jsonResult(
+      await respondToOffer(session, pathId(id ?? ""), read.body.response),
+    );
+  },
+);
 
-      const { id } = await params;
-      return jsonResult(
-        await respondToOffer(session, pathId(id), body.response),
-      );
-    },
-  );
-}
+export const { GET, PUT, PATCH, DELETE } = methodNotAllowed(["POST"]);

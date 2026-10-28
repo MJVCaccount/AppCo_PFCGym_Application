@@ -39,14 +39,28 @@ function start(build: Build, onResult?: OnResult): Promise<void> {
 }
 
 export function queueEmail(build: Build, onResult?: OnResult): void {
+  deferWork(() => start(build, onResult));
+}
+
+/**
+ * Runs `work` once the response has been sent, and keeps the serverless
+ * function alive until it finishes. Outside a request (a script or a test)
+ * there is nothing to defer to, so it starts now; `flushEmails` waits for it.
+ */
+export function deferWork(work: () => Promise<void>): void {
+  const tracked = () => {
+    const running = work().catch((e: unknown) => {
+      logger.error("Deferred work failed", { error: e });
+    });
+    inFlight.add(running);
+    void running.finally(() => inFlight.delete(running));
+    return running;
+  };
+
   try {
-    // Runs once the response has been sent, and keeps the serverless
-    // function alive until the email is out.
-    after(() => start(build, onResult));
+    after(tracked);
   } catch {
-    // Outside a request (a script or a test) there is nothing to defer to, so
-    // start now; `flushEmails` can wait for it.
-    void start(build, onResult);
+    void tracked();
   }
 }
 

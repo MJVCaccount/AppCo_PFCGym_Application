@@ -233,7 +233,7 @@ async function main() {
 
   await check("a single slot carries the same count as the week view", async () => {
     const fromWeek = (await getTimetable(now))[0];
-    assert.deepEqual(await getSlot(fromWeek.id, now), fromWeek);
+    assert.deepEqual(await getSlot(fromWeek!.id, now), fromWeek);
     assert.equal(await getSlot(999_999, now), undefined);
   });
 
@@ -247,13 +247,13 @@ async function main() {
 
     await testDb.booking.update({
       where: { id: one.id },
-      data: { status: "Cancelled" },
+      data: { status: "Cancelled", cancelledAt: new Date() },
     });
     assert.equal((await getSlot(slot.id, now))!.booked, slot.booked - 1);
 
     await testDb.booking.update({
       where: { id: one.id },
-      data: { status: "Confirmed" },
+      data: { status: "Confirmed", cancelledAt: null },
     });
 
     // A week later the next session is a different date with no bookings.
@@ -264,13 +264,13 @@ async function main() {
   await check("an inactive class leaves the timetable", async () => {
     const slot = (await getSlotsFor("sun", now))[0];
     await testDb.gymClass.update({
-      where: { id: slot.id },
+      where: { id: slot!.id },
       data: { isActive: false },
     });
     assert.equal((await getTimetable(now)).length, 19);
-    assert.equal(await getSlot(slot.id, now), undefined);
+    assert.equal(await getSlot(slot!.id, now), undefined);
     await testDb.gymClass.update({
-      where: { id: slot.id },
+      where: { id: slot!.id },
       data: { isActive: true },
     });
   });
@@ -350,8 +350,8 @@ async function main() {
         testDb.user.findUniqueOrThrow({ where: { email } }),
       ),
     );
-    assert.notEqual(sofia.passwordSalt, marcus.passwordSalt);
-    assert.notEqual(sofia.passwordHash, marcus.passwordHash);
+    assert.notEqual(sofia!.passwordSalt, marcus!.passwordSalt);
+    assert.notEqual(sofia!.passwordHash, marcus!.passwordHash);
   });
 
   await check("no plaintext password is stored, and none leaves the repository", async () => {
@@ -407,13 +407,13 @@ async function main() {
       fullName: "  New Person ",
       phone: "  +27 82 000 0000 ",
       password: "Testing123!",
-      planId: basePlan.id,
+      planId: basePlan!.id,
     });
     assert.equal(created.email, "new.person@example.co.za");
     assert.equal(created.fullName, "New Person");
     assert.equal(created.phone, "+27 82 000 0000");
     assert.equal(created.role, "Member");
-    assert.equal(created.planId, basePlan.id);
+    assert.equal(created.planId, basePlan!.id);
     assert.equal(created.isActive, true);
 
     assert.ok(await validateCredentials("new.person@example.co.za", "Testing123!"));
@@ -441,7 +441,7 @@ async function main() {
       email: "john@pfc.co.za",
       fullName: "John Case",
       password: "Testing123!",
-      planId: basePlan.id,
+      planId: basePlan!.id,
     });
     const user = await validateCredentials("JOHN@PFC.CO.ZA", "Testing123!");
     assert.equal(user?.email, "john@pfc.co.za");
@@ -475,8 +475,8 @@ async function main() {
     const user = (await findByEmail("member@pfc.co.za"))!;
     const original = user.planId;
 
-    assert.equal(await setPlan(user.id, topPlan.id), "ok");
-    assert.equal((await findById(user.id))?.planId, topPlan.id);
+    assert.equal(await setPlan(user.id, topPlan!.id), "ok");
+    assert.equal((await findById(user.id))?.planId, topPlan!.id);
 
     assert.equal(await setPlan(user.id, null), "ok");
     assert.equal((await findById(user.id))?.planId, null);
@@ -495,8 +495,8 @@ async function main() {
       where: { isActive: false },
     });
 
-    assert.equal(await setPlan(999_999, basePlan.id), "no-member");
-    assert.equal(await setPlan(admin.id, basePlan.id), "no-member");
+    assert.equal(await setPlan(999_999, basePlan!.id), "no-member");
+    assert.equal(await setPlan(admin.id, basePlan!.id), "no-member");
     assert.equal(await setPlan(user.id, 999_999), "no-plan");
     assert.equal(await setPlan(user.id, retired.id), "no-plan");
     assert.notEqual((await findById(user.id))?.planId, retired.id);
@@ -515,7 +515,7 @@ async function main() {
     assert.equal(await cancelMembership(999_999), false);
 
     // Rejoining clears the cancellation stamp.
-    assert.equal(await setPlan(user.id, basePlan.id), "ok");
+    assert.equal(await setPlan(user.id, basePlan!.id), "ok");
     const rejoined = await testDb.member.findUniqueOrThrow({
       where: { membershipId: user.id },
     });
@@ -526,16 +526,16 @@ async function main() {
     const coach = toSessionUser((await findByEmail("sofia@pfc.co.za"))!);
     const member = toSessionUser((await findByEmail("member@pfc.co.za"))!);
 
-    const refused = await changePlan(coach, basePlan.id);
+    const refused = await changePlan(coach, basePlan!.id);
     assert.equal(refused.ok, false);
     assert.equal(refused.status, 403);
 
     const missing = await changePlan(member, 999_999);
     assert.equal(missing.status, 404);
 
-    const changed = await changePlan(member, topPlan.id);
+    const changed = await changePlan(member, topPlan!.id);
     assert.equal(changed.ok, true);
-    assert.equal(changed.plan?.pricePerMonth, 1050);
+    assert.equal(changed.data?.pricePerMonth, 1050);
   });
 
   console.log("\nDATABASE CONSTRAINTS");
@@ -691,9 +691,23 @@ async function main() {
     assert.ok(RULES.phone("abc"));
   });
 
-  await check("password rule enforces 8 characters", () => {
-    assert.equal(RULES.password("12345678"), null);
-    assert.ok(RULES.password("1234567"));
+  await check("password rule enforces 10 to 128 characters and refuses the commonest choices", () => {
+    assert.equal(RULES.password("kettle-Lamp-42"), null);
+    assert.equal(RULES.password("a1b2c3d4e5"), null, "exactly 10");
+    assert.match(RULES.password("a1b2c3d4e")!, /at least 10/);
+    assert.equal(RULES.password("Zq7-".repeat(32)), null, "exactly 128");
+    assert.match(RULES.password("Zq7-".repeat(32) + "x")!, /at most 128/);
+
+    for (const common of ["password123", "PASSWORD123", "1234567890", "qwertyuiop", "aaaaaaaaaaaa", "abababababab", "Welcome123!"]) {
+      assert.match(RULES.password(common) ?? "", /too common/, common);
+    }
+  });
+
+  await check("signing in only enforces the ceiling, so an 8-character password from before still works", () => {
+    assert.equal(RULES.loginPassword("12345678"), null);
+    assert.equal(RULES.loginPassword("Admin123!"), null);
+    assert.match(RULES.loginPassword("")!, /Enter your password/);
+    assert.match(RULES.loginPassword("x".repeat(129))!, /at most 128/);
   });
 
   await check("message rule enforces 10 characters", () => {
