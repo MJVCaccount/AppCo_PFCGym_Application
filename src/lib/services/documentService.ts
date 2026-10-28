@@ -11,6 +11,7 @@ import {
   listForReview,
   reviewDocument as reviewRow,
 } from "@/lib/repositories/documentsRepository";
+import { record as audit } from "@/lib/repositories/auditRepository";
 import { notifyDocumentReviewed } from "@/lib/services/notificationService";
 import {
   ADMIN_ONLY,
@@ -203,6 +204,23 @@ export async function openDocument(
       return storageFailure(e);
     }
     if (!stream) return fail(404, NOT_FOUND_DOCUMENT);
+
+    // An administrator reading a fighter's medical or licence leaves a trace.
+    // If the trace cannot be written the file is not handed over.
+    if (isAdmin(session)) {
+      try {
+        await audit({
+          actorId: session.id,
+          action: "document.download",
+          entity: "FighterDocument",
+          entityId: id,
+          detail: { fighterId: document.fighterId },
+        });
+      } catch (e) {
+        await stream.cancel().catch(() => undefined);
+        throw e;
+      }
+    }
 
     return succeed({
       stream,
