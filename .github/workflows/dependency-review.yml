@@ -1,0 +1,29 @@
+name: Dependency review
+
+# On every pull request: fails when the change adds or upgrades a dependency
+# with a known vulnerability of high severity or worse. It reads GitHub's
+# dependency graph, so it needs that feature (on by default for public
+# repositories; for a private one it needs GitHub Advanced Security).
+#
+# Kept in its own workflow, and NOT in the list of required checks, so that a
+# repository without the dependency graph does not get every pull request
+# blocked. It has not run yet; see docs/task3/pentest-report.md.
+on:
+  pull_request:
+    branches: [develop, main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/dependency-review-action@2031cfc080254a8a887f58cffee85186f0e49e48 # v4.9.0
+        with:
+          fail-on-severity: high

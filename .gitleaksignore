@@ -1,0 +1,6 @@
+# Gitleaks fingerprints (commit:file:rule:line) that are reviewed and not secrets.
+#
+# tests/seed-guard.test.ts, the commit that added it: a made-up password
+# ("S3cretPassw0rdDoNotLeak") used to prove the seed guard never prints a
+# password. It opens nothing.
+c9224cdaa2c2aeb86bafd82b3f19e9e0cd553405:tests/seed-guard.test.ts:generic-api-key:10
