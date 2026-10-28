@@ -3,6 +3,9 @@ import "server-only";
 import { cookies } from "next/headers";
 import { cache } from "react";
 
+// Layering exception (enforced in tests/architecture.test.ts): the session check
+// runs on every request and needs one narrow read, so it uses the repository
+// directly rather than going through a service.
 import { getSessionState } from "./repositories/usersRepository";
 import {
   COOKIE_NAME,
@@ -50,7 +53,16 @@ export async function createSession(user: SessionUser): Promise<void> {
 
 export async function destroySession(): Promise<void> {
   const store = await cookies();
-  store.delete(COOKIE_NAME);
+  // Cleared with the same attributes it was set with. A __Host- cookie can
+  // only be overwritten by a Secure Set-Cookie, so a bare delete would leave
+  // it in the browser.
+  store.set(COOKIE_NAME, "", {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge: 0,
+  });
 }
 
 /**

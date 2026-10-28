@@ -15,7 +15,18 @@ import type { SessionUser } from "./types";
  * that role: getSession() checks that against the database.
  */
 
-export const COOKIE_NAME = "pfc_session";
+/**
+ * In production the cookie carries the __Host- prefix: the browser then only
+ * accepts it when it is Secure, has Path=/ and names no Domain, so a sibling
+ * subdomain or a plain-http response cannot plant or overwrite it. Outside
+ * production (http on localhost, the tests) the plain name is used because a
+ * Secure cookie would not be stored there.
+ */
+export function sessionCookieName(env: string | undefined): string {
+  return env === "production" ? "__Host-pfc_session" : "pfc_session";
+}
+
+export const COOKIE_NAME = sessionCookieName(process.env.NODE_ENV);
 export const MAX_AGE_SECONDS = 60 * 60 * 8; // 8 hours
 
 const ALLOWED_ROLES: readonly string[] = Object.values(ROLES);
@@ -43,17 +54,27 @@ function sign(payload: string): string {
 
 export interface SessionPayload extends SessionUser {
   sv: number;
+  /** Expiry, in seconds since 1970. The cookie's own Max-Age is only a request to the browser. */
+  exp: number;
 }
 
-export function encodeSession(user: SessionUser, sv: number): string {
-  const payload = Buffer.from(JSON.stringify({ ...user, sv })).toString(
+export function encodeSession(
+  user: SessionUser,
+  sv: number,
+  nowMs: number = Date.now(),
+): string {
+  const exp = Math.floor(nowMs / 1000) + MAX_AGE_SECONDS;
+  const payload = Buffer.from(JSON.stringify({ ...user, sv, exp })).toString(
     "base64url",
   );
   return `${payload}.${sign(payload)}`;
 }
 
 /** The payload of a cookie value whose signature checks out, else null. */
-export function decodeSession(token: string): SessionPayload | null {
+export function decodeSession(
+  token: string,
+  nowMs: number = Date.now(),
+): SessionPayload | null {
   const [payload, signature] = token.split(".");
   if (!payload || !signature) return null;
 
@@ -73,6 +94,12 @@ export function decodeSession(token: string): SessionPayload | null {
       typeof parsed?.email !== "string" ||
       typeof parsed?.fullName !== "string" ||
       !Number.isInteger(parsed?.sv) ||
+      // Expiry is enforced here, on the server. A copied cookie stops working
+      // when it runs out, whatever the browser does with Max-Age. A signed
+      // cookie with no expiry is refused.
+      !Number.isInteger(parsed?.exp) ||
+      parsed.exp * 1000 <= nowMs ||
+      parsed.exp * 1000 > nowMs + (MAX_AGE_SECONDS + 60) * 1000 ||
       !ALLOWED_ROLES.includes(parsed?.role)
     ) {
       return null;
