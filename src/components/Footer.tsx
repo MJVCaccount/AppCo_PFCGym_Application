@@ -1,7 +1,7 @@
 import Link from "next/link";
 
 import { gymDateAndTime } from "@/lib/dates";
-import { getOpeningHours } from "@/lib/repositories/hoursRepository";
+import { getOpeningHours } from "@/lib/services/catalogueService";
 import { DAY_NAMES, formatHours } from "@/lib/types";
 
 import Logo from "./Logo";

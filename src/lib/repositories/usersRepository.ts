@@ -2,6 +2,8 @@ import "server-only";
 
 import { Prisma } from "@prisma/client";
 
+import { randomBytes } from "node:crypto";
+
 import { hashPassword, verifyPassword } from "@/lib/password";
 import { prisma } from "@/lib/prisma";
 import { record as audit } from "@/lib/repositories/auditRepository";
@@ -340,6 +342,155 @@ async function lockUser(
     FROM "User" WHERE "id" = ${id} FOR UPDATE`;
 
   return row;
+}
+
+/**
+ * Signs an account out of every device: the stored sessionVersion goes up, so
+ * every cookie issued under the old one stops working on its next request.
+ * The account row is locked first so two calls cannot both read the same
+ * version. Returns false if the account no longer exists.
+ */
+export async function bumpSessionVersion(
+  userId: number,
+  actorId: number,
+  action = "session.revoke",
+): Promise<boolean> {
+  return prisma.$transaction(async (tx) => {
+    const target = await lockUser(tx, userId);
+    if (!target) return false;
+
+    await tx.user.update({
+      where: { id: userId },
+      data: { sessionVersion: { increment: 1 } },
+    });
+    await audit(
+      { actorId, action, entity: "User", entityId: userId },
+      tx,
+    );
+
+    return true;
+  }, TRANSACTION_OPTIONS);
+}
+
+export type EraseUserResult =
+  | {
+      ok: true;
+      /** Storage paths of the deleted documents, to remove from the private store. */
+      documentPathnames: string[];
+      /** The public image the account had, to remove from the public store. */
+      imageUrl: string | null;
+      bookingsCancelled: number;
+    }
+  | { ok: false; reason: "not-found" | "protected-role" | "already-erased" };
+
+/** What an erased account's email becomes. It cannot receive mail and is unique per account. */
+export function erasedEmail(id: number): string {
+  return `erased-${id}@erased.invalid`;
+}
+
+/**
+ * Anonymises one member or fighter (POPIA right to erasure), in one transaction.
+ *
+ *  - name, email and phone are replaced; the password is replaced with a random
+ *    one nobody knows; the account is deactivated and signed out everywhere
+ *  - documents are deleted from the database (the caller deletes the files);
+ *    password-reset tokens and contact enquiries sent from the same address
+ *    are deleted; a public profile image link is cleared
+ *  - future bookings are cancelled
+ *  - bookings, bout offers and the audit trail are kept: they are the gym's
+ *    records, and they no longer identify anyone
+ *
+ * Staff accounts are not erased here: a coach owns classes and an admin runs
+ * the system, so they are deactivated or archived instead.
+ */
+export async function eraseUser(
+  targetId: number,
+  actorId: number,
+  now: Date = new Date(),
+): Promise<EraseUserResult> {
+  return prisma.$transaction(async (tx): Promise<EraseUserResult> => {
+    const target = await lockUser(tx, targetId);
+    if (!target) return { ok: false, reason: "not-found" };
+    if (target.role === "Admin" || target.role === "Coach") {
+      return { ok: false, reason: "protected-role" };
+    }
+
+    const current = await tx.user.findUniqueOrThrow({
+      where: { id: targetId },
+      select: { email: true },
+    });
+    if (current.email === erasedEmail(targetId)) {
+      return { ok: false, reason: "already-erased" };
+    }
+
+    const bookingsCancelled = await cancelFutureConfirmed(tx, { memberId: targetId }, now);
+
+    const documents = await tx.fighterDocument.findMany({
+      where: { fighterId: targetId },
+      select: { fileUrl: true },
+    });
+    await tx.fighterDocument.deleteMany({ where: { fighterId: targetId } });
+
+    const fighter = await tx.fighter.findUnique({
+      where: { fighterId: targetId },
+      select: { imageUrl: true },
+    });
+    if (fighter) {
+      await tx.fighter.update({ where: { fighterId: targetId }, data: { imageUrl: null } });
+    }
+
+    await tx.passwordResetToken.deleteMany({ where: { userId: targetId } });
+    await tx.contactEnquiry.deleteMany({
+      where: { email: { equals: current.email, mode: "insensitive" } },
+    });
+
+    // Queued mail addressed to them, or sent to the gym on their behalf, holds
+    // their name and message in its body.
+    await tx.emailOutbox.deleteMany({
+      where: {
+        OR: [
+          { toAddress: { equals: current.email, mode: "insensitive" } },
+          { replyTo: { equals: current.email, mode: "insensitive" } },
+        ],
+      },
+    });
+
+    const unknown = hashPassword(randomBytes(32).toString("hex"));
+    await tx.user.update({
+      where: { id: targetId },
+      data: {
+        fullName: "Erased member",
+        email: erasedEmail(targetId),
+        phone: null,
+        isActive: false,
+        passwordHash: unknown.hash,
+        passwordSalt: unknown.salt,
+        sessionVersion: { increment: 1 },
+      },
+    });
+
+    // No name, email or phone in the audit row: it must outlive the person.
+    await audit(
+      {
+        actorId,
+        action: "user.erase",
+        entity: "User",
+        entityId: targetId,
+        detail: {
+          documentsDeleted: documents.length,
+          bookingsCancelled,
+        },
+      },
+      tx,
+    );
+
+    return {
+      ok: true,
+      documentPathnames: documents.map((d) => d.fileUrl),
+      imageUrl: fighter?.imageUrl ?? null,
+      bookingsCancelled,
+    };
+  }, TRANSACTION_OPTIONS);
 }
 
 export type DeactivateUserResult =

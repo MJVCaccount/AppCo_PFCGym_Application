@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import { getCheapestPlanPrice } from "@/lib/repositories/plansRepository";
+import { getCheapestPlanPrice } from "@/lib/services/catalogueService";
 import { formatPrice } from "@/lib/types";
 
 /** Mobile-only bar. Hidden from 1024px up by the stylesheet. */

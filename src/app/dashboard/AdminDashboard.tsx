@@ -1,12 +1,7 @@
 import Link from "next/link";
 
 import { logout } from "@/actions/auth";
-import { countUpcoming } from "@/lib/repositories/eventsRepository";
-import { countFighters } from "@/lib/repositories/fightersRepository";
-import { countPending } from "@/lib/repositories/participationsRepository";
-import { getClasses } from "@/lib/repositories/programmesRepository";
-import { getTimetable } from "@/lib/repositories/timetableRepository";
-import { countByRole, getAll } from "@/lib/repositories/usersRepository";
+import { getAdminOverview } from "@/lib/services/dashboardService";
 import { initials, isFull } from "@/lib/types";
 import type { SessionUser } from "@/lib/types";
 
@@ -18,7 +13,7 @@ export default async function AdminDashboard({
 }: {
   session: SessionUser;
 }) {
-  const [
+  const {
     timetable,
     users,
     classes,
@@ -27,16 +22,7 @@ export default async function AdminDashboard({
     fighterCount,
     upcomingEventCount,
     pendingOfferCount,
-  ] = await Promise.all([
-    getTimetable(),
-    getAll(DASHBOARD_USERS),
-    getClasses(),
-    countByRole("Member"),
-    countByRole("Coach"),
-    countFighters(),
-    countUpcoming(),
-    countPending(),
-  ]);
+  } = await getAdminOverview(DASHBOARD_USERS);
 
   return (
     <div className="dash">
