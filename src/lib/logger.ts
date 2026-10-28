@@ -8,6 +8,8 @@ import "server-only";
  * request bodies are dropped whole — log the fields you need, by name.
  */
 
+import { currentRequestId } from "@/lib/requestContext";
+
 type Level = "info" | "warn" | "error";
 
 export type LogMeta = Record<string, unknown>;
@@ -52,6 +54,7 @@ function write(level: Level, message: string, meta?: LogMeta): void {
       level,
       time: new Date().toISOString(),
       message,
+      ...(currentRequestId() ? { requestId: currentRequestId() } : {}),
       ...(meta ? { meta: sanitise(meta) } : {}),
     });
   } catch {

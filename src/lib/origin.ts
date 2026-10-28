@@ -1,6 +1,6 @@
 import "server-only";
 
-import { jsonError } from "@/lib/api";
+import { jsonError } from "@/lib/apiEnvelope";
 import { appUrl } from "@/lib/env";
 
 /**
@@ -19,7 +19,7 @@ import { appUrl } from "@/lib/env";
 export function assertSameOrigin(request: Request): Response | null {
   if (isSameOrigin(request)) return null;
 
-  return jsonError("Cross-origin requests are not allowed.", 403);
+  return jsonError("Cross-origin requests are not allowed.", 403, "CROSS_ORIGIN");
 }
 
 export function isSameOrigin(request: Request): boolean {

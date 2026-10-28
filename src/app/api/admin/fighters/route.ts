@@ -1,10 +1,6 @@
-import {
-  jsonResult,
-  readJsonObject,
-  withSession,
-} from "@/lib/api";
+import { jsonResult, readJsonObject } from "@/lib/api";
+import { methodNotAllowed, userRoute } from "@/lib/apiHandler";
 import { promoteToFighter } from "@/lib/services/fighterService";
-import { assertSameOrigin } from "@/lib/origin";
 
 export const dynamic = "force-dynamic";
 
@@ -13,21 +9,16 @@ export const dynamic = "force-dynamic";
  *
  * Admin only. Promotes a member to Fighter.
  */
-export async function POST(request: Request) {
-  const blocked = assertSameOrigin(request);
-  if (blocked) return blocked;
+export const POST = userRoute(
+  { name: "POST /api/admin/fighters", failure: "Could not promote the member.", limit: "admin" },
+  async ({ request, session }) => {
+    const read = await readJsonObject(request);
+    if (!read.ok) return read.response;
 
-  return withSession(
-    "POST /api/admin/fighters",
-    "Could not promote the member.",
-    async (session) => {
-      const read = await readJsonObject(request);
-      if (!read.ok) return read.response;
-      const body = read.body;
+    return jsonResult(
+      await promoteToFighter(session, read.body.memberId, read.body.weightClass),
+    );
+  },
+);
 
-      return jsonResult(
-        await promoteToFighter(session, body.memberId, body.weightClass),
-      );
-    },
-  );
-}
+export const { GET, PUT, PATCH, DELETE } = methodNotAllowed(["POST"]);

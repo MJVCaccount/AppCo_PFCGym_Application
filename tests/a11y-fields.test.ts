@@ -74,7 +74,7 @@ function controls(source: string): { tag: string; text: string; line: number }[]
       }
     }
     found.push({
-      tag: m[1],
+      tag: m[1]!,
       text: source.slice(m.index, end + 1),
       line: source.slice(0, m.index).split("\n").length,
     });
@@ -236,8 +236,8 @@ check("no control is given two labels at once", () => {
     );
     const seen = new Set<string>();
     const doubled = forAttrs.filter((a) => {
-      if (seen.has(a)) return true;
-      seen.add(a);
+      if (seen.has(a!)) return true;
+      seen.add(a!);
       return false;
     });
     assert.deepEqual(

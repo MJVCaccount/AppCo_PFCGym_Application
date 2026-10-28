@@ -52,7 +52,7 @@ async function sessionFor(email: string): Promise<SessionUser> {
 function configureEmail(on: boolean) {
   process.env.RESEND_API_KEY = on ? "re_test_key" : "";
   process.env.EMAIL_FROM = on ? "PFC <no-reply@test.pfc.invalid>" : "";
-  process.env.CONTACT_INBOX = on ? "inbox@test.pfc.invalid" : "";
+  process.env.CONTACT_INBOX = on ? "inbox@test.pfc.example" : "";
 }
 
 function form(fields: Record<string, string>): FormData {
@@ -167,7 +167,7 @@ async function main() {
       // Only plain layout tags: no <img> (remote images, tracking pixels),
       // <script>, <iframe> or <link>.
       const tags = new Set(
-        [...email.html.matchAll(/<\/?([a-z0-9]+)/gi)].map((m) => m[1].toLowerCase()),
+        [...email.html.matchAll(/<\/?([a-z0-9]+)/gi)].map((m) => m[1]!.toLowerCase()),
       );
       for (const tag of tags) {
         assert.ok(
@@ -248,8 +248,8 @@ async function main() {
     });
     assert.equal(ok, true);
     assert.equal(stub.outbox.length, 1);
-    assert.equal(stub.outbox[0].from, "PFC <no-reply@test.pfc.invalid>");
-    assert.equal(stub.outbox[0].replyTo, "r@example.co.za");
+    assert.equal(stub.outbox[0]!.from, "PFC <no-reply@test.pfc.invalid>");
+    assert.equal(stub.outbox[0]!.replyTo, "r@example.co.za");
   });
 
   await check("a provider error gives false, not an exception", async () => {
@@ -287,10 +287,10 @@ async function main() {
     assert.equal(state.ok, true);
     const rows = await testDb.contactEnquiry.findMany();
     assert.equal(rows.length, 1);
-    assert.equal(rows[0].phone, null, "an empty phone is stored as null");
-    assert.ok(rows[0].emailSentAt, "emailSentAt is set once the gym's copy is out");
+    assert.equal(rows[0]!.phone, null, "an empty phone is stored as null");
+    assert.ok(rows[0]!.emailSentAt, "emailSentAt is set once the gym's copy is out");
 
-    const toGym = stub.outbox.find((m) => m.to === "inbox@test.pfc.invalid");
+    const toGym = stub.outbox.find((m) => m.to === "inbox@test.pfc.example");
     const reply = stub.outbox.find((m) => m.to === "thandi@example.co.za");
     assert.ok(toGym && reply);
     assert.equal(toGym.replyTo, "thandi@example.co.za");
@@ -338,7 +338,7 @@ async function main() {
     assert.equal(state.ok, true);
     const rows = await testDb.contactEnquiry.findMany({ orderBy: { id: "desc" }, take: 1 });
     assert.equal(await testDb.contactEnquiry.count(), before + 1);
-    assert.equal(rows[0].emailSentAt, null);
+    assert.equal(rows[0]!.emailSentAt, null);
     assert.equal(stub.outbox.length, 0);
   });
 
@@ -360,8 +360,8 @@ async function main() {
     assert.equal(list.ok, true);
     const items = list.data!.items;
     assert.equal(list.data!.pageSize, 25);
-    assert.equal(items[items.length - 1].id, first.id, "handled rows sink to the end");
-    assert.ok(items[items.length - 1].handledAt);
+    assert.equal(items[items.length - 1]!.id, first.id, "handled rows sink to the end");
+    assert.ok(items[items.length - 1]!.handledAt);
     assert.ok(items.slice(0, -1).every((e) => e.handledAt === null));
     const unhandled = items.slice(0, -1).map((e) => e.createdAt);
     assert.deepEqual([...unhandled].sort().reverse(), unhandled, "newest first");
@@ -406,7 +406,7 @@ async function main() {
 
     const welcomes = stub.outbox.filter((m) => m.to === "new.person@example.co.za");
     assert.equal(welcomes.length, 1);
-    assert.equal(welcomes[0].subject, "Welcome to PFC");
+    assert.equal(welcomes[0]!.subject, "Welcome to PFC");
   });
 
   const week = await getTimetable(new Date());
@@ -422,11 +422,11 @@ async function main() {
     assert.equal(result.ok, true);
     assert.equal(stub.outbox.length, 1);
     const mail = stub.outbox[0];
-    assert.equal(mail.to, member.email);
-    assert.match(mail.subject, /Elite Boxing/);
-    assert.match(mail.html ?? "", /Marcus Thompson/);
-    assert.match(mail.text ?? "", /Monday/);
-    assert.match(mail.text ?? "", /Johannesburg/);
+    assert.equal(mail!.to, member.email);
+    assert.match(mail!.subject, /Elite Boxing/);
+    assert.match(mail!.html ?? "", /Marcus Thompson/);
+    assert.match(mail!.text ?? "", /Monday/);
+    assert.match(mail!.text ?? "", /Johannesburg/);
   });
 
   await check("a refused booking sends nothing", async () => {
@@ -468,13 +468,21 @@ async function main() {
 
     assert.equal(result.ok, true);
     assert.equal(result.data!.cancelledBookings, booked);
-    assert.equal(stub.outbox.length, booked);
+    // Every member is queued once. The seeded filler members have .invalid
+    // addresses, which can never receive mail: those are Skipped without
+    // calling the provider, and the real ones are sent.
+    const queued = await testDb.emailOutbox.findMany({ where: { kind: "booking.cancelled" } });
+    assert.equal(queued.length, booked);
+    assert.equal(new Set(queued.map((r) => r.toAddress)).size, booked, "one each");
+    const deliverable = queued.filter((r) => !r.toAddress.endsWith(".invalid"));
+    assert.ok(deliverable.length >= 1);
+    assert.equal(stub.outbox.length, deliverable.length);
     assert.ok(stub.outbox.every((m) => /^Cancelled: Elite Boxing/.test(m.subject)));
     assert.ok(
       stub.outbox.some((m) => m.to === member.email),
       "the member we booked is told",
     );
-    assert.equal(new Set(stub.outbox.map((m) => String(m.to))).size, booked, "one each");
+    assert.ok(queued.filter((r) => r.toAddress.endsWith(".invalid")).every((r) => r.status === "Skipped"));
   });
 
   await check("offering a bout emails the fighter; cancelling emails every offered fighter", async () => {
@@ -495,8 +503,8 @@ async function main() {
     await flushEmails();
     assert.equal(offer.ok, true);
     assert.equal(stub.outbox.length, 1);
-    assert.equal(stub.outbox[0].to, fighter.email);
-    assert.match(stub.outbox[0].subject, /Bout offer: Email Test Fight Night/);
+    assert.equal(stub.outbox[0]!.to, fighter.email);
+    assert.match(stub.outbox[0]!.subject, /Bout offer: Email Test Fight Night/);
 
     stub.outbox.length = 0;
     const duplicate = await offerBout(admin, event.data!.id, fighter.id, {});
@@ -508,8 +516,8 @@ async function main() {
     await flushEmails();
     assert.equal(cancelled.ok, true);
     assert.equal(stub.outbox.length, 1);
-    assert.equal(stub.outbox[0].to, fighter.email);
-    assert.match(stub.outbox[0].subject, /Event cancelled: Email Test Fight Night/);
+    assert.equal(stub.outbox[0]!.to, fighter.email);
+    assert.match(stub.outbox[0]!.subject, /Event cancelled: Email Test Fight Night/);
 
     stub.outbox.length = 0;
     const again = await cancelEvent(admin, event.data!.id);

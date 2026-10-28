@@ -3,7 +3,6 @@ import "server-only";
 import {
   createEnquiry,
   listEnquiries,
-  markEmailSent,
   setHandled,
 } from "@/lib/repositories/contactRepository";
 import { notifyEnquiry } from "@/lib/services/notificationService";
@@ -74,9 +73,7 @@ export async function submitEnquiry(
     phone,
     message: message.trim(),
   };
-  notifyEnquiry(saved, async (sent) => {
-    if (sent) await markEmailSent(id, new Date());
-  });
+  notifyEnquiry({ ...saved, id });
 
   return succeed({ id }, 201);
 }

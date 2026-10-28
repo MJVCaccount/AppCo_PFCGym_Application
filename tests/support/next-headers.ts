@@ -2,6 +2,13 @@ type Cookie = { name: string; value: string };
 
 const jar = new Map<string, Cookie>();
 
+/** The attributes of the last Set-Cookie for each name, so tests can check them. */
+const lastOptions = new Map<string, Record<string, unknown>>();
+
+export function lastCookieOptions(name: string): Record<string, unknown> | undefined {
+  return lastOptions.get(name);
+}
+
 const store = {
   get(name: string): Cookie | undefined {
     return jar.get(name);
@@ -12,8 +19,11 @@ const store = {
   has(name: string): boolean {
     return jar.has(name);
   },
-  set(name: string, value: string, _options?: unknown): void {
-    jar.set(name, { name, value });
+  set(name: string, value: string, options?: Record<string, unknown>): void {
+    lastOptions.set(name, options ?? {});
+    // An empty value or a zero lifetime is how a cookie is cleared.
+    if (value === "" || options?.maxAge === 0) jar.delete(name);
+    else jar.set(name, { name, value });
   },
   delete(name: string): void {
     jar.delete(name);

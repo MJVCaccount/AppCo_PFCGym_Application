@@ -49,8 +49,9 @@ export async function book(data: FormData): Promise<void> {
   const emailNote = isEmailConfigured()
     ? " A confirmation email is on its way."
     : "";
-  const confirmation = result.slot
-    ? `Booked ${result.slot.className} at ${result.slot.startsAt} with ${result.slot.coachName}.${emailNote}`
+  const slot = result.data?.slot;
+  const confirmation = slot
+    ? `Booked ${slot.className} at ${slot.startsAt} with ${slot.coachName}.${emailNote}`
     : "Class booked.";
 
   redirect(`/timetable?day=${day}&booked=${encodeURIComponent(confirmation)}`);
@@ -72,8 +73,8 @@ export async function cancelBookingAction(data: FormData): Promise<void> {
     redirect(`/bookings?error=${encodeURIComponent(message)}`);
   }
 
-  const confirmation = result.booking
-    ? `Cancelled ${result.booking.className} at ${result.booking.startsAt}.`
+  const confirmation = result.data
+    ? `Cancelled ${result.data.className} at ${result.data.startsAt}.`
     : "Booking cancelled.";
 
   redirect(`/bookings?notice=${encodeURIComponent(confirmation)}`);
@@ -86,7 +87,7 @@ export async function changePlan(data: FormData): Promise<void> {
 
   const result = await switchPlan(session, Number(data.get("planId")));
 
-  if (!result.ok || !result.plan) {
+  if (!result.ok || !result.data) {
     const message = result.error ?? "That plan could not be found.";
     redirect(`/memberships?error=${encodeURIComponent(message)}`);
   }
@@ -95,7 +96,7 @@ export async function changePlan(data: FormData): Promise<void> {
 
   redirect(
     `/dashboard?notice=${encodeURIComponent(
-      `You are now on the R${result.plan.pricePerMonth} plan.`,
+      `You are now on the R${result.data.pricePerMonth} plan.`,
     )}`,
   );
 }

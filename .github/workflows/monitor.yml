@@ -1,0 +1,107 @@
+name: Monitor
+
+# Every 15 minutes: is production ready, how fast, and (with HEALTH_TOKEN) are
+# the database, the email outbox, the migrations and the daily job healthy?
+# One GitHub issue labelled "incident" tracks it: opened on the first failure,
+# updated while the problem changes, closed on recovery.
+#
+# Needs (repository Settings > Secrets and variables > Actions):
+#   variable PRODUCTION_URL                    e.g. https://pfc-gym.vercel.app
+#   secret   HEALTH_TOKEN                      the same value as in Vercel (optional;
+#                                              without it only readiness is checked)
+#   secret   VERCEL_AUTOMATION_BYPASS_SECRET   only if Deployment Protection is on
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+# A slow run must not pile up behind the next one.
+concurrency:
+  group: monitor
+  cancel-in-progress: false
+
+env:
+  INCIDENT_TITLE: "Production incident: monitor checks failing"
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 20
+
+      - name: Check production
+        id: monitor
+        env:
+          MONITOR_URL: ${{ vars.PRODUCTION_URL }}
+          HEALTH_TOKEN: ${{ secrets.HEALTH_TOKEN }}
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+        run: |
+          if [ -z "$MONITOR_URL" ]; then
+            echo "::error::Set the repository variable PRODUCTION_URL."
+            exit 1
+          fi
+          node scripts/ci/monitor.mjs | tail -n 1 > result.json
+          cat result.json
+          echo "ok=$(node -p "JSON.parse(require('fs').readFileSync('result.json','utf8')).ok")" >> "$GITHUB_OUTPUT"
+
+      - name: Find the open incident
+        id: existing
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh label create incident --color D73A4A --description "Production is unhealthy" --force
+          number="$(gh issue list --label incident --state open --search "$INCIDENT_TITLE in:title" --json number --jq '.[0].number // empty')"
+          echo "number=$number" >> "$GITHUB_OUTPUT"
+          if [ -n "$number" ]; then
+            gh issue view "$number" --json body --jq .body > existing.md
+          fi
+
+      - name: Decide
+        id: decide
+        env:
+          HAS_ISSUE: ${{ steps.existing.outputs.number }}
+        run: |
+          node --input-type=module -e "
+            import { readFileSync, existsSync, writeFileSync, appendFileSync } from 'node:fs';
+            import { decide } from './scripts/ci/monitor.mjs';
+            const result = JSON.parse(readFileSync('result.json', 'utf8'));
+            const existing = process.env.HAS_ISSUE && existsSync('existing.md') ? readFileSync('existing.md', 'utf8') : null;
+            const plan = decide(result.problems, existing);
+            writeFileSync('body.md', plan.body);
+            appendFileSync(process.env.GITHUB_OUTPUT, 'action=' + plan.action + '\n');
+          "
+
+      - name: Open the incident
+        if: steps.decide.outputs.action == 'open'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh issue create --title "$INCIDENT_TITLE" --label incident --body-file body.md
+
+      - name: Update the incident
+        if: steps.decide.outputs.action == 'update'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NUMBER: ${{ steps.existing.outputs.number }}
+        run: |
+          gh issue edit "$NUMBER" --body-file body.md
+          gh issue comment "$NUMBER" --body-file body.md
+
+      - name: Close the incident
+        if: steps.decide.outputs.action == 'close'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NUMBER: ${{ steps.existing.outputs.number }}
+        run: gh issue close "$NUMBER" --comment "$(cat body.md)"
+
+      - name: Fail the run while production is unhealthy
+        if: steps.monitor.outputs.ok == 'false'
+        run: |
+          echo "::error::Production checks are failing. See the incident issue."
+          exit 1

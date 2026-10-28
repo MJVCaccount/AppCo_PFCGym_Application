@@ -3,10 +3,9 @@ import Link from "next/link";
 import { logout } from "@/actions/auth";
 import { cancelMembership } from "@/actions/gym";
 import { formatGymDate } from "@/lib/dates";
-import { getPlan } from "@/lib/repositories/plansRepository";
 import { memberStats } from "@/lib/services/coachService";
-import { getNextAvailableSlot } from "@/lib/repositories/timetableRepository";
-import { findById } from "@/lib/repositories/usersRepository";
+import { getMembership } from "@/lib/services/membershipService";
+import { getNextAvailableSlot } from "@/lib/services/timetableService";
 import { DAY_NAMES, formatPrice, initials } from "@/lib/types";
 import type { SessionUser } from "@/lib/types";
 
@@ -23,15 +22,11 @@ export default async function MemberDashboard({
   roleLabel?: string;
   children?: React.ReactNode;
 }) {
-  const [user, next, stats] = await Promise.all([
-    findById(session.id),
+  const [{ plan }, next, stats] = await Promise.all([
+    getMembership(session.id),
     getNextAvailableSlot(),
     memberStats(session, session.id),
   ]);
-  const plan =
-    user?.planId != null
-      ? await getPlan(user.planId, { includeInactive: true })
-      : undefined;
 
   const attended = stats.data?.attendedThisMonth ?? 0;
   const upcoming = stats.data?.upcoming ?? 0;

@@ -9,7 +9,8 @@
 %%   EventStatus     Scheduled | Completed | Cancelled
 %%   DocumentType    Medical | Licence | Other
 %%   DocumentStatus  Pending | Approved | Rejected
-%% CHECK constraints (prisma/migrations/20261004015208_integrity_checks) are listed in erd-notes.md.
+%% CHECK constraints (prisma/migrations/20261004015208_integrity_checks, and the row-state rules in
+%% docs/task3/pending-migrations until applied) and the trigram indexes on User are listed in erd-notes.md.
 erDiagram
     User ||--o| Member : "is (shared PK)"
     User ||--o| Coach : "is (shared PK)"
@@ -183,4 +184,21 @@ erDiagram
         String key PK "policy:sha256(identifier)"
         Int count
         DateTime resetAt "index"
+    }
+
+    EmailOutbox {
+        Int id PK
+        String kind "booking.confirmed, enquiry.gym, ..."
+        String toAddress
+        String replyTo "nullable"
+        String subject
+        String html "dropped once sent"
+        String text "dropped once sent"
+        EmailStatus status "Pending, Sending, Sent, Dead, Skipped (index with nextAttemptAt)"
+        Int attempts
+        DateTime nextAttemptAt
+        String lastError "nullable, no address"
+        Int enquiryId "nullable, no foreign key"
+        DateTime createdAt
+        DateTime sentAt "nullable, index; set exactly when Sent"
     }

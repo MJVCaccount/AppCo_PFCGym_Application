@@ -85,10 +85,10 @@ export default function SiteNav({ session, todayHours, logoutAction }: Props) {
 
             if (event.shiftKey && document.activeElement === first) {
                 event.preventDefault();
-                last.focus();
+                last?.focus();
             } else if (!event.shiftKey && document.activeElement === last) {
                 event.preventDefault();
-                first.focus();
+                first?.focus();
             }
         }
 

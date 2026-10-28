@@ -4,6 +4,9 @@ import { createHash } from "node:crypto";
 import { headers } from "next/headers";
 
 import { logger } from "@/lib/logger";
+// Layering exception (enforced in tests/architecture.test.ts): the limiter is
+// infrastructure that services and actions both call, so it talks to its own
+// bucket repository directly.
 import {
   clearBucket,
   deleteExpiredBuckets,
@@ -22,6 +25,8 @@ import {
 
 export interface RateLimitResult {
   allowed: boolean;
+  /** True for exactly one call per window: the first one refused. For audit rows. */
+  justExceeded: boolean;
   remaining: number;
   retryAfterSeconds: number;
 }
@@ -59,6 +64,7 @@ export async function rateLimit(
 
     return {
       allowed: state.count <= limit,
+      justExceeded: state.count === limit + 1,
       remaining: Math.max(0, limit - state.count),
       retryAfterSeconds: state.retryAfterSeconds,
     };
@@ -72,10 +78,11 @@ export async function rateLimit(
     return closed
       ? {
           allowed: false,
+          justExceeded: false,
           remaining: 0,
           retryAfterSeconds: FAIL_CLOSED_RETRY_SECONDS,
         }
-      : { allowed: true, remaining: limit, retryAfterSeconds: 0 };
+      : { allowed: true, justExceeded: false, remaining: limit, retryAfterSeconds: 0 };
   }
 }
 
@@ -106,6 +113,17 @@ export const POLICIES = {
   contact: { limit: 5, windowSeconds: HOUR, failClosed: false },
   booking: { limit: 30, windowSeconds: 10 * MINUTE, failClosed: false },
   upload: { limit: 20, windowSeconds: HOUR, failClosed: false },
+  // Generous limits for everything else. They are not there to stop a person
+  // using the site; they cap a script, and fail open if the limiter is down.
+  publicRead: { limit: 120, windowSeconds: MINUTE, failClosed: false },
+  userRead: { limit: 120, windowSeconds: MINUTE, failClosed: false },
+  cancel: { limit: 30, windowSeconds: 10 * MINUTE, failClosed: false },
+  respond: { limit: 30, windowSeconds: 10 * MINUTE, failClosed: false },
+  documentDelete: { limit: 30, windowSeconds: HOUR, failClosed: false },
+  documentDownload: { limit: 60, windowSeconds: 10 * MINUTE, failClosed: false },
+  admin: { limit: 120, windowSeconds: 10 * MINUTE, failClosed: false },
+  secretRoute: { limit: 30, windowSeconds: MINUTE, failClosed: false },
+  signOutEverywhere: { limit: 5, windowSeconds: HOUR, failClosed: true },
 } as const satisfies Record<string, Policy>;
 
 export type PolicyName = keyof typeof POLICIES;

@@ -18,6 +18,7 @@ Diagram: [erd.mmd](erd.mmd). Source of truth: `prisma/schema.prisma` and `prisma
 | `AuditLog` | `prisma/schema.prisma:268` | Who did what to which row. `actorId` is `SetNull` so history survives account deletion. Written by `record()` in `src/lib/repositories/auditRepository.ts`, inside the same transaction as the change. |
 | `Review` | `prisma/schema.prisma:281` | Public testimonials (`getReviews`, `src/lib/repositories/reviewsRepository.ts`). No relation to `User`. |
 | `OpeningHours` | `prisma/schema.prisma:289` | Per-day opening hours; `Day` is the primary key (`src/lib/repositories/hoursRepository.ts`). |
+| `EmailOutbox` (+ enum `EmailStatus`) | `prisma/schema.prisma`, migration `20261028090000_email_outbox` | Mail that carries no secret, stored before it is sent so an outage or the daily cap delays it instead of losing it (`src/lib/services/outboxService.ts`). No foreign keys on purpose: a row must survive the account it names, and erasure deletes rows by address. Two CHECKs: `email_outbox_sent_at_matches_status` (Sent exactly when `sentAt` is set) and `email_outbox_attempts_nonnegative`. Additive: the previous release never touches it. |
 | `RateLimitBucket` | `prisma/schema.prisma:297`, migration `20261004140000_rate_limit` | Fixed-window counters in Postgres (`src/lib/rateLimit.ts`). `key` is `policy:sha256(identifier)`. |
 | `User.sessionVersion` | `prisma/schema.prisma:86`, migration `20261004115908_session_version` | Bumped by a password reset (`consumeToken`); the cookie carries the value it was issued under and `getSession()` rejects a mismatch (`src/lib/session.ts`). |
 | `EventParticipation @@index([eventId])` | `prisma/schema.prisma:227`, migration `20261004160000_participation_event_index` | Offers are listed by event; the other index `(fighterId, eventId)` leads with `fighterId` (`docs/AUDIT.md` section 5). |
@@ -38,7 +39,32 @@ Diagram: [erd.mmd](erd.mmd). Source of truth: `prisma/schema.prisma` and `prisma
 
 Tests that exercise them: `tests/logic.test.ts` ("a class with capacity 0 is rejected", "a class starting at \"25:99\" is rejected", "a review rating of 6 is rejected", "a negative plan price is rejected"). No test for `hours_range`: **not verified** by a test.
 
-There is no CHECK on `Fighter.wins/losses/draws` or on `Booking`/`EventParticipation` state (`docs/AUDIT.md` section 5, a recorded P2).
+### Row-state rules (written, not yet applied)
+
+`docs/task3/pending-migrations/20261027120000_integrity_constraints.sql` repairs any row that already breaks a rule, then adds the constraints below. It is held back from `prisma/migrations` until the code that stops producing bad rows is live, because the previous release still writes a stale `cancelledAt` on the full-class path. It was applied to an empty database and to a seeded one with deliberately bad rows, and the full suite passes with it applied.
+
+| Constraint | Rule |
+| --- | --- |
+| `fighter_record_nonnegative` | `wins`, `losses` and `draws` are 0 or more |
+| `fighter_weight_class_not_blank` | `btrim("weightClass") <> ''` |
+| `booking_failure_reason_matches_status` | `failureReason` is set exactly when the status is `Failed` |
+| `booking_cancelled_at_matches_status` | `cancelledAt` is set exactly when the status is `Cancelled` |
+| `booking_completed_at_matches_status` | `completedAt` is set exactly when the status is `Completed` |
+| `participation_result_needs_acceptance` | a `result` needs `availability = 'Accepted'` |
+| `participation_responded_at_matches_answer` | `respondedAt` is set exactly when the answer is not `Pending` |
+| `document_reviewed_at_matches_status` | `reviewedAt` is set exactly when the status is not `Pending` |
+| `reset_token_expires_after_creation` | `expiresAt > createdAt` |
+| `user_email_lowercase` | `email = lower(email)` |
+
+`npm run db:verify` (`prisma/verifyIntegrity.ts`) checks these rules, the subtype links and bookings over capacity read-only on any database; `tests/integrity.test.ts` covers it.
+
+### Indexes added for member search
+
+| Index | Why |
+| --- | --- |
+| `User_fullName_trgm_idx`, `User_email_trgm_idx` (GIN, `pg_trgm`) | The admin members search is `ILIKE '%text%'`. At 10,000 users: 11.6 ms to 0.68 ms. Migration `20261027120100_member_search_trigram`. |
+
+Indexes tried and rejected (no gain on realistic data, or not expressible in the Prisma schema) are in [backend-changes.md](backend-changes.md).
 
 ## Delete behaviour worth stating
 

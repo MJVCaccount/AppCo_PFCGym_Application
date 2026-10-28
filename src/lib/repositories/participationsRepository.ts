@@ -202,7 +202,7 @@ export async function createOffer(
 
 export type SetAvailabilityResult =
   | { ok: true; offer: BoutOffer }
-  | { ok: false; reason: "not-found" | "event-closed" };
+  | { ok: false; reason: "not-found" | "event-closed" | "result-recorded" };
 
 /**
  * Records a fighter's answer to their own offer. An offer that belongs to
@@ -219,10 +219,19 @@ export async function setAvailability(
   return prisma.$transaction(async (tx): Promise<SetAvailabilityResult> => {
     const existing = await tx.eventParticipation.findFirst({
       where: { id, fighterId },
-      select: { event: { select: { status: true, eventDate: true } } },
+      select: {
+        result: true,
+        event: { select: { status: true, eventDate: true } },
+      },
     });
 
     if (!existing) return { ok: false, reason: "not-found" };
+    // A recorded result needs an Accepted offer; changing the answer under it
+    // (possible if the event date was moved) would leave a result for a bout
+    // the fighter says they are not on.
+    if (existing.result !== null) {
+      return { ok: false, reason: "result-recorded" };
+    }
     if (!isOpen(existing.event, now)) {
       return { ok: false, reason: "event-closed" };
     }

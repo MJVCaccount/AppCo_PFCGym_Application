@@ -31,6 +31,7 @@ try {
 // their own values (against the stubs in tests/support).
 for (const name of [
   "RESEND_API_KEY",
+  "EMAIL_SKIP",
   "EMAIL_FROM",
   "CONTACT_INBOX",
   "PUBLIC_BLOB_STORE_ID",
@@ -78,6 +79,10 @@ function resolveTestUrl(): string {
 
   return testUrl;
 }
+
+// One access-log line per API request is noise in a test run; the tests that
+// check the log turn it back on.
+process.env.API_ACCESS_LOG = "0";
 
 const testUrl = resolveTestUrl();
 process.env.DATABASE_URL = testUrl;

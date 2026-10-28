@@ -40,7 +40,7 @@ function gymMoment(now: Date): GymMoment {
   }
 
   return {
-    day: parts.weekday.toLowerCase() as DayKey,
+    day: (parts.weekday ?? "").toLowerCase() as DayKey,
     date: new Date(
       Date.UTC(Number(parts.year), Number(parts.month) - 1, Number(parts.day)),
     ),
@@ -92,7 +92,7 @@ export function parseIsoDate(value: unknown): Date | null {
 /** The weekday of a date-only value (UTC midnight), as the gym's day key. */
 export function dayOfDate(date: Date): DayKey {
   // getUTCDay: Sunday is 0; DAY_ORDER starts on Monday.
-  return DAY_ORDER[(date.getUTCDay() + 6) % 7];
+  return DAY_ORDER[(date.getUTCDay() + 6) % 7]!;
 }
 
 /** A date-only value moved by a number of days. */

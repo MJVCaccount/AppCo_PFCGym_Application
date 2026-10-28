@@ -1,6 +1,6 @@
-import { jsonResult, pathId, withSession } from "@/lib/api";
+import { jsonResult, pathId } from "@/lib/api";
+import { methodNotAllowed, userRoute } from "@/lib/apiHandler";
 import { demoteFighter } from "@/lib/services/fighterService";
-import { assertSameOrigin } from "@/lib/origin";
 
 export const dynamic = "force-dynamic";
 
@@ -10,19 +10,14 @@ export const dynamic = "force-dynamic";
  * Admin only. Puts a fighter back to Member; refused with 409 while the
  * fighter has any bout offer or document.
  */
-export async function DELETE(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> },
-) {
-  const blocked = assertSameOrigin(request);
-  if (blocked) return blocked;
+export const DELETE = userRoute(
+  {
+    name: "DELETE /api/admin/fighters/[id]",
+    failure: "Could not demote the fighter.",
+    limit: "admin",
+  },
+  async ({ session, params }) =>
+    jsonResult(await demoteFighter(session, pathId((await params()).id ?? ""))),
+);
 
-  return withSession(
-    "DELETE /api/admin/fighters/[id]",
-    "Could not demote the fighter.",
-    async (session) => {
-      const { id } = await params;
-      return jsonResult(await demoteFighter(session, pathId(id)));
-    },
-  );
-}
+export const { GET, POST, PUT, PATCH } = methodNotAllowed(["DELETE"]);

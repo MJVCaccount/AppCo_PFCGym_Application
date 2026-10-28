@@ -18,11 +18,19 @@ const TRANSACTION_OPTIONS = { timeout: 10_000, maxWait: 10_000 };
  * the latest link works. Pass `actorId` when an admin triggers it (a coach
  * invite) to have the change audited in the same transaction.
  */
+/** Deletes tokens that can no longer be used: expired, or already used. */
+export async function deleteExpiredOrUsedTokens(now: Date): Promise<number> {
+  const result = await prisma.passwordResetToken.deleteMany({
+    where: { OR: [{ expiresAt: { lt: now } }, { usedAt: { not: null } }] },
+  });
+  return result.count;
+}
+
 export async function replaceToken(input: {
   userId: number;
   tokenHash: string;
   expiresAt: Date;
-  audit?: { actorId: number; action: string };
+  audit?: { actorId: number | null; action: string };
 }): Promise<void> {
   await prisma.$transaction(async (tx) => {
     await tx.passwordResetToken.deleteMany({

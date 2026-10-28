@@ -1,8 +1,8 @@
-# Final audit (Prompt 7, part 1)
+# Final audit (part 1)
 
 Read-only audit of the repository at commit `c9224cd` (branch `feature/prisma-schema`, working tree clean). Method: grep for every rule in the standing instructions, then read the code behind each hit. Ratings: **P0** breaks data, security or deploy; **P1** wrong behaviour a user will hit; **P2** polish.
 
-Nothing was changed while auditing except this file. Part 2 of the prompt fixes the P0 and P1 items and the trivial P2 ones; the results are listed in the report that closes Part 2.
+Nothing was changed while auditing except this file. Part 2 fixes the P0 and P1 items and the trivial P2 ones; the results are listed in the report that closes Part 2.
 
 ## Summary
 
@@ -56,7 +56,7 @@ Every `route.ts` (19 of 19) and every page and layout except three exports `dyna
 
 Findings:
 
-* **P2** Five authenticated state-changing routes have origin checks but no rate limit (`/api/bookings/:id/cancel`, `/api/fighter/offers/:id/respond`, `DELETE /api/fighter/documents/:id`, and the admin routes). All need a valid session and a role, and every write is idempotent or guarded by a status check, so abuse is bounded; but the prompt's rule is "origin and rate limit", and the README's limits list does not mention that they are exempt.
+* **P2** Five authenticated state-changing routes have origin checks but no rate limit (`/api/bookings/:id/cancel`, `/api/fighter/offers/:id/respond`, `DELETE /api/fighter/documents/:id`, and the admin routes). All need a valid session and a role, and every write is idempotent or guarded by a status check, so abuse is bounded; but the rule is "origin and rate limit", and the README's limits list does not mention that they are exempt.
 * **P2** `POST /api/admin/uploads/image` answers `{ "url": ... }` (`src/app/api/admin/uploads/image/route.ts:34`) while every other success is `{ "data": ... }`. The shared error shape is respected; the success shape is not. Left as is because `ImageUploadField` depends on it.
 * No 403 is returned where a 404 is required. Ownership probes (booking, offer, document, class roster, member stats) all answer 404; 403 is used only for "wrong role", which reveals nothing about an id.
 * No mutation lacks a role check. Reads that expose other users' data (`openDocument`, `getRoster`, `memberStats`) check ownership or role in the service.
@@ -127,7 +127,7 @@ No raw error, SQL or stack reaches a client. Route handlers go through `withSess
 | `SMOKE_BYPASS_SECRET` (`scripts/smoke.mjs:23`) | **missing** | named in prose only |
 | `NODE_ENV`, `NEXT_RUNTIME`, `NEXT_PHASE`, `VERCEL_OIDC_TOKEN` | platform-set | n/a (OIDC token is mentioned in `.env.example`) |
 
-* **P1** The README has no environment-variable table. The prompt (and the Task 3 hand-in) expects one; the variables are scattered over prose and `docs/OPERATIONS.md`.
+* **P1** The README has no environment-variable table. The Task 3 hand-in expects one; the variables are scattered over prose and `docs/OPERATIONS.md`.
 * **P2** `SMOKE_BYPASS_SECRET` is missing from `.env.example`.
 * **P1** `validateEnv()` (`src/lib/env.ts:62`) checks only `APP_URL`. The README says the app "refuses to start" without `SESSION_SECRET`, but the check lives in `sessionToken.ts:24-34` and fires on first use: a production server with no secret starts, serves public pages, and returns 500 on every sign-in. Check it at start-up.
 * The development-only session fallback (`sessionToken.ts:36`) is reachable only when `NODE_ENV !== "production"` and `SESSION_SECRET` is shorter than 32 characters. Vercel sets `NODE_ENV=production` for preview and production builds, so it is unreachable there. `NODE_ENV=test` or an unset `NODE_ENV` on a self-hosted box would use it; acceptable, but a reviewer may prefer it to throw unless `NODE_ENV === "development" | "test"`. **P2**.
@@ -139,7 +139,7 @@ No raw error, SQL or stack reaches a client. Route handlers go through `withSess
 * No email is sent inside a database transaction. Repositories never call `notify*`; services call it after the commit, and `queueEmail` defers with `after()`.
 * **P2** The enquiry and booking confirmation emails are best-effort; a failed send is logged and the enquiry's `emailSentAt` stays null. That is by design and visible to the admin.
 
-## 10. Accessibility (pages added since Prompt 1)
+## 10. Accessibility (pages added since the first audit)
 
 Good: every `TextField` / `SelectField` has a `<label htmlFor>`; every error slot is `role="alert"` and fields set `aria-invalid` and `aria-describedby`; every admin table has an `sr-only` caption and `<th>` headers; row buttons carry `aria-label`s that name the row; the rejection note and member plan select have (visually hidden) labels; the members search is a `role="search"` form.
 

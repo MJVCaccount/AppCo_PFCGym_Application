@@ -6,15 +6,16 @@ import CoachCard from "@/components/CoachCard";
 import PlanCard from "@/components/PlanCard";
 import StickyCta from "@/components/StickyCta";
 import { currentDayAndHour } from "@/lib/dates";
-import { getCoaches } from "@/lib/repositories/coachesRepository";
-import { getHoursFor, isOpenAt } from "@/lib/repositories/hoursRepository";
 import {
   getCheapestPlanPrice,
+  getClasses,
+  getCoaches,
+  getHoursFor,
   getPlans,
-} from "@/lib/repositories/plansRepository";
-import { getClasses } from "@/lib/repositories/programmesRepository";
-import { getReviews } from "@/lib/repositories/reviewsRepository";
-import { getTimetable } from "@/lib/repositories/timetableRepository";
+  getReviews,
+  isOpenAt,
+} from "@/lib/services/catalogueService";
+import { getTimetable } from "@/lib/services/timetableService";
 import { formatHours, formatPrice, initials, timeAgo } from "@/lib/types";
 
 // The hero shows whether the gym is open right now, so this page cannot be

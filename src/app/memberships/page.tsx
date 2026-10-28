@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 
 import Alert from "@/components/Alert";
 import PlanCard from "@/components/PlanCard";
-import { getPlan, getPlans } from "@/lib/repositories/plansRepository";
-import { findById } from "@/lib/repositories/usersRepository";
+import { getPlans } from "@/lib/services/catalogueService";
+import { getMembership } from "@/lib/services/membershipService";
 import { getSession } from "@/lib/session";
 import { firstParam, formatPrice, type SearchParams } from "@/lib/types";
 
@@ -23,15 +23,12 @@ export default async function MembershipsPage({
   const error = firstParam((await searchParams).error);
 
   const session = await getSession();
-  const [plans, user] = await Promise.all([
+  const [plans, membership] = await Promise.all([
     getPlans(),
-    session ? findById(session.id) : undefined,
+    session ? getMembership(session.id) : undefined,
   ]);
 
-  const currentPlan =
-    user?.planId != null
-      ? await getPlan(user.planId, { includeInactive: true })
-      : undefined;
+  const currentPlan = membership?.plan;
   const isStaff = session?.role === "Coach" || session?.role === "Admin";
 
   return (

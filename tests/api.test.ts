@@ -162,16 +162,16 @@ async function main() {
     const result = await createBooking(member, boxing.id, now);
     assert.equal(result.ok, true);
     assert.equal(result.status, 201);
-    assert.equal(result.slot?.booked, boxing.booked + 1);
-    assert.equal(result.booking?.className, "Elite Boxing");
-    assert.equal(result.booking?.coachName, "Marcus Thompson");
-    assert.equal(result.booking?.status, "Confirmed");
-    assert.match(String(result.booking?.sessionDate), /^\d{4}-\d{2}-\d{2}$/);
+    assert.equal(result.data?.slot?.booked, boxing.booked + 1);
+    assert.equal(result.data?.booking?.className, "Elite Boxing");
+    assert.equal(result.data?.booking?.coachName, "Marcus Thompson");
+    assert.equal(result.data?.booking?.status, "Confirmed");
+    assert.match(String(result.data?.booking?.sessionDate), /^\d{4}-\d{2}-\d{2}$/);
 
     const rows = await bookingsFor(member.id, boxing.id);
     assert.equal(rows.length, 1);
-    assert.equal(rows[0].status, "Confirmed");
-    memberBookingId = rows[0].id;
+    assert.equal(rows[0]!.status, "Confirmed");
+    memberBookingId = rows[0]!.id;
   });
 
   await check("booking the same class twice returns 409", async () => {
@@ -186,7 +186,7 @@ async function main() {
   await check("a fighter can book too", async () => {
     const result = await createBooking(fighter, muayThai.id, now);
     assert.equal(result.status, 201);
-    assert.equal(result.slot?.booked, muayThai.booked + 1);
+    assert.equal(result.data?.slot?.booked, muayThai.booked + 1);
   });
 
   await check("a full class returns 409 and writes a Failed row", async () => {
@@ -197,8 +197,8 @@ async function main() {
 
     const rows = await bookingsFor(member.id, grappling.id);
     assert.equal(rows.length, 1);
-    assert.equal(rows[0].status, "Failed");
-    assert.equal(rows[0].failureReason, "Class full");
+    assert.equal(rows[0]!.status, "Failed");
+    assert.equal(rows[0]!.failureReason, "Class full");
 
     assert.equal((await getSlot(grappling.id, now))!.booked, grappling.capacity);
   });
@@ -209,8 +209,8 @@ async function main() {
 
     const rows = await bookingsFor(member.id, grappling.id);
     assert.equal(rows.length, 1);
-    assert.equal(rows[0].id, before.id);
-    assert.equal(rows[0].status, "Failed");
+    assert.equal(rows[0]!.id, before!.id);
+    assert.equal(rows[0]!.status, "Failed");
   });
 
   await check("when a place frees up, the Failed row becomes Confirmed", async () => {
@@ -225,13 +225,13 @@ async function main() {
     const failed = (await bookingsFor(member.id, grappling.id))[0];
     const result = await createBooking(member, grappling.id, now);
     assert.equal(result.status, 201);
-    assert.equal(result.slot?.booked, grappling.capacity);
+    assert.equal(result.data?.slot?.booked, grappling.capacity);
 
     const rows = await bookingsFor(member.id, grappling.id);
     assert.equal(rows.length, 1);
-    assert.equal(rows[0].id, failed.id);
-    assert.equal(rows[0].status, "Confirmed");
-    assert.equal(rows[0].failureReason, null);
+    assert.equal(rows[0]!.id, failed!.id);
+    assert.equal(rows[0]!.status, "Confirmed");
+    assert.equal(rows[0]!.failureReason, null);
   });
 
   console.log("\nBOOKING SERVICE: CONCURRENCY");
@@ -287,7 +287,7 @@ async function main() {
   const other = await sessionFor(fillerEmail(20));
   const otherBooking = await createBooking(other, muayThai.id, now);
   assert.equal(otherBooking.status, 201);
-  const otherBookingId = otherBooking.booking!.id;
+  const otherBookingId = otherBooking.data!.booking.id;
 
   await check("my bookings lists upcoming sessions with class and coach", async () => {
     const { upcoming, past } = await listMyBookings(member, now);
@@ -313,9 +313,9 @@ async function main() {
       (b) => b.className === "Submission Grappling",
     );
     const boxingFirst =
-      when(upcoming[boxingAt]) < when(upcoming[grapplingAt]);
+      when(upcoming[boxingAt]!) < when(upcoming[grapplingAt]!);
     assert.equal(boxingAt < grapplingAt, boxingFirst, "Monday classes in time order");
-    if (upcoming[boxingAt].sessionDate === upcoming[grapplingAt].sessionDate) {
+    if (upcoming[boxingAt]!.sessionDate === upcoming[grapplingAt]!.sessionDate) {
       assert.ok(boxingFirst, "same date: the earlier start time comes first");
     }
 
@@ -385,16 +385,16 @@ async function main() {
   await check("a NoShow set by a coach is shown as it is", async () => {
     const mine = (await bookingsFor(member.id, openMat.id))[0];
     await testDb.booking.update({
-      where: { id: mine.id },
+      where: { id: mine!.id },
       data: { status: "NoShow" },
     });
 
     const later = new Date(now.getTime() + 8 * 24 * 60 * 60 * 1000);
     const { past } = await listMyBookings(member, later);
-    assert.equal(past.find((b) => b.id === mine.id)?.status, "NoShow");
+    assert.equal(past.find((b) => b.id === mine!.id)?.status, "NoShow");
 
     await testDb.booking.update({
-      where: { id: mine.id },
+      where: { id: mine!.id },
       data: { status: "Confirmed" },
     });
   });
@@ -403,7 +403,7 @@ async function main() {
     const result = await cancelBooking(member, memberBookingId, now);
     assert.equal(result.ok, true);
     assert.equal(result.status, 200);
-    assert.equal(result.booking?.status, "Cancelled");
+    assert.equal(result.data?.status, "Cancelled");
 
     const row = await testDb.booking.findUniqueOrThrow({
       where: { id: memberBookingId },
@@ -426,24 +426,24 @@ async function main() {
   await check("re-booking after a cancel reuses the same row", async () => {
     const result = await createBooking(member, boxing.id, now);
     assert.equal(result.status, 201);
-    assert.equal(result.booking?.id, memberBookingId);
+    assert.equal(result.data?.booking?.id, memberBookingId);
 
     const rows = await bookingsFor(member.id, boxing.id);
     assert.equal(rows.length, 1);
-    assert.equal(rows[0].status, "Confirmed");
-    assert.equal(rows[0].cancelledAt, null);
+    assert.equal(rows[0]!.status, "Confirmed");
+    assert.equal(rows[0]!.cancelledAt, null);
   });
 
   console.log("\nAPI ROUTES: GET");
 
   await check("GET /api/health reports ok", async () => {
-    const res = getHealthRoute();
+    const res = await getHealthRoute(new Request("http://localhost/api/test"));
     assert.equal(res.status, 200);
     assert.deepEqual(await res.json(), { status: "ok" });
   });
 
   await check("GET /api/classes returns the six programmes", async () => {
-    const res = await getClassesRoute();
+    const res = await getClassesRoute(new Request("http://localhost/api/test"));
     assert.equal(res.status, 200);
     const body = await res.json();
     assert.equal(Array.isArray(body.data), true);
@@ -517,7 +517,7 @@ async function main() {
       "You are already booked into this class.",
     );
 
-    routeBookingId = (await bookingsFor(member.id, yoga.id))[0].id;
+    routeBookingId = (await bookingsFor(member.id, yoga.id))[0]!.id;
   });
 
   await check("POST /api/bookings/:id/cancel cancels my booking only", async () => {

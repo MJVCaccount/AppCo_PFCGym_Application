@@ -1,0 +1,1270 @@
+openapi: 3.1.0
+info:
+  title: PFC Gym API
+  version: 1.0.0
+  summary: The JSON API of the Professional Fighting Championship gym application.
+  description: |
+    Every route is JSON unless noted. Source of truth for the shapes is
+    `src/lib/types.ts`; this file is checked against the route files and the
+    real responses by `tests/openapi.test.ts`.
+
+    **Success** bodies are `{ "data": ... }` with the status shown (two routes
+    differ and say so). **Errors** are always
+
+    ```json
+    { "error": { "message": "...", "code": "NOT_FOUND", "requestId": "..." } }
+    ```
+
+    `code` is stable and is what a client should branch on; `message` is for
+    people and may be reworded. `requestId` equals the `X-Request-Id` response
+    header and the server log line.
+
+    **Authentication** is the signed `pfc_session` cookie set by the sign-in
+    page. There is no token endpoint. A request without a valid session is 401;
+    a signed-in caller whose role may not use the route is 403, except where the
+    id belongs to someone else, which is 404 so ids cannot be probed.
+
+    **Writes** (POST, PATCH, DELETE) must carry an `Origin` (or `Referer`) whose
+    host is the application's own, else 403 `CROSS_ORIGIN`. This check runs
+    before authentication.
+
+    **Bodies** are limited to 100,000 bytes and must be `application/json`
+    (415, 413, 400); uploads are multipart and limited per route.
+
+    **Rate limits** answer 429 with a `Retry-After` header in seconds.
+
+    Dates are ISO 8601; `sessionDate` is a calendar date on the gym's own
+    (Johannesburg) calendar.
+  license:
+    name: Proprietary
+    identifier: LicenseRef-Proprietary
+servers:
+  - url: /
+    description: The server this document is read from
+  - url: https://pfc-gym.vercel.app
+    description: Production
+tags:
+  - name: Health
+    description: Liveness, readiness, the operator routes and this description.
+  - name: Catalogue
+    description: Public reads of classes, the timetable and events.
+  - name: Bookings
+    description: A member reserving, listing and cancelling places.
+  - name: Fighter
+    description: A fighter's offers and documents.
+  - name: Account
+    description: The signed-in person's own account.
+  - name: Admin
+    description: Administrators only.
+security: []
+paths:
+  /api/health:
+    get:
+      tags: [Health]
+      operationId: getHealth
+      summary: Liveness
+      description: The server is up. No database call, so a database outage does not restart a healthy server.
+      responses:
+        "200":
+          description: Alive.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Status" }
+              example: { status: ok }
+        "405": { $ref: "#/components/responses/MethodNotAllowed" }
+  /api/health/ready:
+    get:
+      tags: [Health]
+      operationId: getReady
+      summary: Readiness
+      description: The server can reach its database. The failure body carries no detail.
+      responses:
+        "200":
+          description: Ready.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Status" }
+              example: { status: ok }
+        "503":
+          description: The database cannot be reached.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Status" }
+              example: { status: unavailable }
+        "405": { $ref: "#/components/responses/MethodNotAllowed" }
+  /api/health/detail:
+    get:
+      tags: [Health]
+      operationId: getHealthDetail
+      summary: Operator health detail
+      description: >
+        For an operator or a monitor, not a browser. Needs the header
+        `Authorization: Bearer <HEALTH_TOKEN>`. With HEALTH_TOKEN unset (or
+        shorter than 32 characters) the route answers 404 as if it did not
+        exist. No secret, key or connection string is ever in the answer.
+      security: [{ bearerToken: [] }]
+      responses:
+        "200":
+          description: The detail. `status` is `degraded` when a migration this release expects has not been applied or more than three emails were parked as dead in the last 24 hours.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: "#/components/schemas/HealthDetail" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "405": { $ref: "#/components/responses/MethodNotAllowed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "500": { $ref: "#/components/responses/Internal" }
+  /api/cron/maintenance:
+    get:
+      tags: [Health]
+      operationId: runMaintenance
+      summary: Daily maintenance (Vercel Cron)
+      description: >
+        Deletes expired or used password-reset tokens and expired rate-limit
+        counters, drains the email outbox and purges old finished rows. Called
+        once a day by Vercel Cron, which sends
+        `Authorization: Bearer <CRON_SECRET>`. With CRON_SECRET unset (or
+        shorter than 32 characters) the route answers 404. Safe to run twice.
+      security: [{ bearerToken: [] }]
+      responses:
+        "200":
+          description: What was done.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: "#/components/schemas/MaintenanceReport" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "405": { $ref: "#/components/responses/MethodNotAllowed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "500": { $ref: "#/components/responses/Internal" }
+  /api/cron/outbox:
+    get:
+      tags: [Health]
+      operationId: drainOutbox
+      summary: Drain the email outbox (hourly workflow)
+      description: >
+        Attempts every due email and does nothing else. Called hourly by the
+        Outbox drain workflow with `Authorization: Bearer <CRON_SECRET>`. An
+        audit row is written only if it sent or parked something. With
+        CRON_SECRET unset (or shorter than 32 characters) the route answers 404.
+        Safe to run twice.
+      security: [{ bearerToken: [] }]
+      responses:
+        "200":
+          description: What was attempted.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: "#/components/schemas/OutboxRun" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "405": { $ref: "#/components/responses/MethodNotAllowed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "500": { $ref: "#/components/responses/Internal" }
+  /api/openapi.json:
+    get:
+      tags: [Health]
+      operationId: getOpenApi
+      summary: This specification as JSON
+      responses:
+        "200":
+          description: The OpenAPI document.
+          content:
+            application/json:
+              schema: { type: object }
+        "405": { $ref: "#/components/responses/MethodNotAllowed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "500": { $ref: "#/components/responses/Internal" }
+  /api/classes:
+    get:
+      tags: [Catalogue]
+      operationId: listClasses
+      summary: Class programmes
+      description: Public and the same for everyone, so it is cacheable for 60 seconds (`s-maxage=60, stale-while-revalidate=300`).
+      responses:
+        "200":
+          description: The programmes.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/ClassProgramme" }
+              example:
+                data:
+                  - id: 1
+                    name: Elite Boxing
+                    slug: elite-boxing
+                    description: Technical boxing for all levels.
+                    level: All levels
+                    durationMinutes: 60
+        "405": { $ref: "#/components/responses/MethodNotAllowed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "500": { $ref: "#/components/responses/Internal" }
+  /api/timetable:
+    get:
+      tags: [Catalogue]
+      operationId: getTimetable
+      summary: The weekly timetable
+      description: Never cached; the booked counts change with every booking.
+      parameters:
+        - name: day
+          in: query
+          required: false
+          description: Limit the answer to one day.
+          schema: { $ref: "#/components/schemas/DayKey" }
+      responses:
+        "200":
+          description: The week, or one day.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/TimetableSlot" }
+              example:
+                data:
+                  - id: 7
+                    day: mon
+                    startsAt: "18:00"
+                    durationMinutes: 60
+                    className: Elite Boxing
+                    coachName: Marcus Thompson
+                    capacity: 20
+                    booked: 12
+        "400": { $ref: "#/components/responses/InvalidRequest" }
+        "405": { $ref: "#/components/responses/MethodNotAllowed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "500": { $ref: "#/components/responses/Internal" }
+  /api/events:
+    get:
+      tags: [Catalogue]
+      operationId: listEvents
+      summary: Upcoming events
+      description: Scheduled events in the future, soonest first. Cacheable for 60 seconds.
+      responses:
+        "200":
+          description: The events.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/CompetitionEvent" }
+        "405": { $ref: "#/components/responses/MethodNotAllowed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "500": { $ref: "#/components/responses/Internal" }
+  /api/bookings:
+    get:
+      tags: [Bookings]
+      operationId: listMyBookings
+      summary: My bookings
+      description: >
+        The signed-in member's bookings. `upcoming` are confirmed and not yet
+        started, soonest first. `past` is everything else, newest first; a
+        confirmed booking whose day has passed is shown as `Completed`.
+      security: [{ sessionCookie: [] }]
+      responses:
+        "200":
+          description: The caller's own bookings.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: "#/components/schemas/MyBookings" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "405": { $ref: "#/components/responses/MethodNotAllowed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "500": { $ref: "#/components/responses/Internal" }
+    post:
+      tags: [Bookings]
+      operationId: createBooking
+      summary: Book a class
+      description: Members and fighters with an active plan only. Limited to 30 per 10 minutes per user. A full class answers 409 and records a Failed booking.
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [slotId]
+              properties:
+                slotId: { type: integer, minimum: 1, maximum: 2147483647 }
+            example: { slotId: 7 }
+      responses:
+        "201":
+          description: Booked. The body is the class as it now stands.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: "#/components/schemas/TimetableSlot" }
+        "400": { $ref: "#/components/responses/InvalidRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "405": { $ref: "#/components/responses/MethodNotAllowed" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "500": { $ref: "#/components/responses/Internal" }
+  /api/bookings/{id}/cancel:
+    post:
+      tags: [Bookings]
+      operationId: cancelBooking
+      summary: Cancel a booking
+      description: Only your own Confirmed booking, before the class starts. Someone else's booking is 404.
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/Id" }
+      responses:
+        "200":
+          description: Cancelled.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: "#/components/schemas/Booking" }
+        "400": { $ref: "#/components/responses/InvalidRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "405": { $ref: "#/components/responses/MethodNotAllowed" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "500": { $ref: "#/components/responses/Internal" }
+  /api/fighter/offers:
+    get:
+      tags: [Fighter]
+      operationId: listMyOffers
+      summary: My bout offers
+      description: Fighters only.
+      security: [{ sessionCookie: [] }]
+      responses:
+        "200":
+          description: The fighter's profile and offers.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: "#/components/schemas/FighterOffers" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "405": { $ref: "#/components/responses/MethodNotAllowed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "500": { $ref: "#/components/responses/Internal" }
+  /api/fighter/offers/{id}/respond:
+    post:
+      tags: [Fighter]
+      operationId: respondToOffer
+      summary: Accept or decline a bout offer
+      description: Your own offer only (someone else's is 404). The answer can change until the event starts, and not once a result is recorded.
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/Id" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [response]
+              properties:
+                response: { type: string, enum: [Accepted, Declined] }
+            example: { response: Accepted }
+      responses:
+        "200":
+          description: Saved.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: "#/components/schemas/BoutOffer" }
+        "400": { $ref: "#/components/responses/InvalidRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "405": { $ref: "#/components/responses/MethodNotAllowed" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "500": { $ref: "#/components/responses/Internal" }
+  /api/fighter/documents:
+    get:
+      tags: [Fighter]
+      operationId: listMyDocuments
+      summary: My documents
+      description: The signed-in fighter's own documents, newest first. The storage location is never included.
+      security: [{ sessionCookie: [] }]
+      responses:
+        "200":
+          description: The documents.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/FighterDocument" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "405": { $ref: "#/components/responses/MethodNotAllowed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "500": { $ref: "#/components/responses/Internal" }
+    post:
+      tags: [Fighter]
+      operationId: uploadMyDocument
+      summary: Upload a document
+      description: >
+        Fighters only; limited to 20 uploads per hour per user and 10 documents
+        in all. The file's real type is read from its bytes (PDF, JPEG or PNG),
+        not from the name or the declared type.
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [type, file]
+              properties:
+                type: { type: string, enum: [Medical, Licence, Other] }
+                file: { type: string, format: binary, description: "At most 4 MB." }
+      responses:
+        "201":
+          description: Stored, awaiting review.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: "#/components/schemas/FighterDocument" }
+        "400": { $ref: "#/components/responses/InvalidRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "405": { $ref: "#/components/responses/MethodNotAllowed" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "500": { $ref: "#/components/responses/Internal" }
+        "502": { $ref: "#/components/responses/StorageError" }
+        "503": { $ref: "#/components/responses/StorageUnavailable" }
+  /api/fighter/documents/{id}:
+    delete:
+      tags: [Fighter]
+      operationId: deleteMyDocument
+      summary: Delete one of my documents
+      description: Only while Pending or Rejected. Someone else's document is 404.
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/Id" }
+      responses:
+        "200":
+          description: Deleted.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    required: [id]
+                    properties:
+                      id: { type: integer }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "405": { $ref: "#/components/responses/MethodNotAllowed" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "500": { $ref: "#/components/responses/Internal" }
+  /api/documents/{id}:
+    get:
+      tags: [Fighter]
+      operationId: downloadDocument
+      summary: Download a document
+      description: >
+        The file itself, to its owner (a fighter) or an administrator. Every
+        other caller, and every missing id, is 404. Sent as an attachment with
+        `X-Content-Type-Options: nosniff`, `Cache-Control: private, no-store` and
+        `Content-Security-Policy: sandbox; default-src 'none'`. An administrator's
+        download is written to the audit trail.
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/Id" }
+      responses:
+        "200":
+          description: The file.
+          content:
+            application/pdf: { schema: { type: string, format: binary } }
+            image/jpeg: { schema: { type: string, format: binary } }
+            image/png: { schema: { type: string, format: binary } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "405": { $ref: "#/components/responses/MethodNotAllowed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "500": { $ref: "#/components/responses/Internal" }
+        "502": { $ref: "#/components/responses/StorageError" }
+        "503": { $ref: "#/components/responses/StorageUnavailable" }
+  /api/admin/events:
+    post:
+      tags: [Admin]
+      operationId: createEvent
+      summary: Create an event
+      description: Administrators only.
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EventInput" }
+            example:
+              name: PFC Fight Night
+              venue: Cape Town Convention Centre
+              description: An evening of amateur bouts.
+              eventDate: "2027-03-20T19:00:00+02:00"
+      responses:
+        "201":
+          description: Created.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: "#/components/schemas/CompetitionEvent" }
+        "400": { $ref: "#/components/responses/InvalidRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "405": { $ref: "#/components/responses/MethodNotAllowed" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "500": { $ref: "#/components/responses/Internal" }
+  /api/admin/events/{id}:
+    patch:
+      tags: [Admin]
+      operationId: updateEvent
+      summary: Edit, cancel or complete an event
+      description: >
+        Two shapes. Edit: any of `name`, `venue`, `description`, `eventDate`,
+        `imageUrl` (at least one). Status: `{ "status": "Cancelled" }` or
+        `{ "status": "Completed" }` on its own, so one request does one thing.
+        Completing needs the event date to have passed.
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/Id" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - { $ref: "#/components/schemas/EventPatch" }
+                - { $ref: "#/components/schemas/EventStatusChange" }
+            example: { status: Cancelled }
+      responses:
+        "200":
+          description: Updated.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: "#/components/schemas/CompetitionEvent" }
+        "400": { $ref: "#/components/responses/InvalidRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "405": { $ref: "#/components/responses/MethodNotAllowed" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "500": { $ref: "#/components/responses/Internal" }
+  /api/admin/events/{id}/offers:
+    post:
+      tags: [Admin]
+      operationId: offerBout
+      summary: Offer a fighter a bout
+      description: Administrators only. One offer per fighter per event.
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/Id" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [fighterId]
+              properties:
+                fighterId: { type: integer, minimum: 1 }
+                opponentName: { type: [string, "null"], maxLength: 120 }
+                boutWeightClass: { type: [string, "null"], maxLength: 40 }
+                boutNotes: { type: [string, "null"], maxLength: 1000 }
+            example: { fighterId: 3, opponentName: J. Smith }
+      responses:
+        "201":
+          description: Offered; the fighter's answer is `Pending`.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: "#/components/schemas/BoutOffer" }
+        "400": { $ref: "#/components/responses/InvalidRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "405": { $ref: "#/components/responses/MethodNotAllowed" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "500": { $ref: "#/components/responses/Internal" }
+  /api/admin/participations/{id}/result:
+    patch:
+      tags: [Admin]
+      operationId: recordResult
+      summary: Record, change or clear a bout result
+      description: >
+        Administrators only. `result` must be sent; `null` clears it. The
+        fighter's record moves with it. Needs an accepted offer and an event
+        that has happened and was not cancelled.
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/Id" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [result]
+              properties:
+                result:
+                  type: [string, "null"]
+                  enum: [Win, Loss, Draw, NoContest, null]
+                notes: { type: [string, "null"], maxLength: 1000 }
+            example: { result: Win, notes: Unanimous decision }
+      responses:
+        "200":
+          description: Recorded.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: "#/components/schemas/BoutOffer" }
+        "400": { $ref: "#/components/responses/InvalidRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "405": { $ref: "#/components/responses/MethodNotAllowed" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "500": { $ref: "#/components/responses/Internal" }
+  /api/admin/fighters:
+    post:
+      tags: [Admin]
+      operationId: promoteToFighter
+      summary: Promote a member to fighter
+      description: Administrators only.
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [memberId, weightClass]
+              properties:
+                memberId: { type: integer, minimum: 1 }
+                weightClass: { type: string, minLength: 1, maxLength: 40 }
+            example: { memberId: 12, weightClass: Welterweight }
+      responses:
+        "201":
+          description: Promoted.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: "#/components/schemas/Fighter" }
+        "400": { $ref: "#/components/responses/InvalidRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "405": { $ref: "#/components/responses/MethodNotAllowed" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "500": { $ref: "#/components/responses/Internal" }
+  /api/admin/fighters/{id}:
+    delete:
+      tags: [Admin]
+      operationId: demoteFighter
+      summary: Demote a fighter to member
+      description: Administrators only. Refused with 409 while the fighter has any offer or document.
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/Id" }
+      responses:
+        "200":
+          description: Demoted.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    required: [id]
+                    properties:
+                      id: { type: integer }
+        "400": { $ref: "#/components/responses/InvalidRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "405": { $ref: "#/components/responses/MethodNotAllowed" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "500": { $ref: "#/components/responses/Internal" }
+  /api/account/sign-out-everywhere:
+    post:
+      tags: [Account]
+      operationId: signOutEverywhere
+      summary: Sign out on every device
+      description: >
+        Ends every session of the signed-in account, on every device and this
+        one: the account's session version goes up, so each cookie issued before
+        now is refused on its next request. For a lost phone or a shared
+        computer. Any signed-in role; limited to 5 an hour.
+      security: [{ sessionCookie: [] }]
+      responses:
+        "200":
+          description: Done. This request's own cookie is cleared as well.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    required: [signedOut]
+                    properties:
+                      signedOut: { type: boolean, const: true }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "405": { $ref: "#/components/responses/MethodNotAllowed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "500": { $ref: "#/components/responses/Internal" }
+  /api/admin/users/{id}/erase:
+    post:
+      tags: [Admin]
+      operationId: eraseUser
+      summary: Erase a member or fighter (POPIA)
+      description: >
+        Administrators only; irreversible. Replaces the person's name, email and
+        phone, deactivates the account, signs it out everywhere, deletes their
+        documents and the stored files, deletes contact-form enquiries sent from
+        their email address, cancels their future bookings, and writes an audit
+        row that holds no personal data. Bookings, bout offers and the audit
+        trail are kept. Staff accounts and your own are refused with 409.
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/Id" }
+      responses:
+        "200":
+          description: Erased.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    required: [id, documentsDeleted, bookingsCancelled]
+                    properties:
+                      id: { type: integer }
+                      documentsDeleted: { type: integer, minimum: 0 }
+                      bookingsCancelled: { type: integer, minimum: 0 }
+        "400": { $ref: "#/components/responses/InvalidRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "405": { $ref: "#/components/responses/MethodNotAllowed" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "500": { $ref: "#/components/responses/Internal" }
+  /api/admin/uploads/image:
+    post:
+      tags: [Admin]
+      operationId: uploadPublicImage
+      summary: Upload a coach or event image
+      description: >
+        Administrators only; limited to 20 uploads per hour per user. JPEG, PNG
+        or WebP by real type, at most 2 MB. **This route answers `{ "url" }`,
+        not `{ "data" }`.**
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: { type: string, format: binary }
+      responses:
+        "201":
+          description: Stored in the public store.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [url]
+                properties:
+                  url: { type: string, format: uri }
+        "400": { $ref: "#/components/responses/InvalidRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "405": { $ref: "#/components/responses/MethodNotAllowed" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "500": { $ref: "#/components/responses/Internal" }
+        "502": { $ref: "#/components/responses/StorageError" }
+        "503": { $ref: "#/components/responses/StorageUnavailable" }
+components:
+  securitySchemes:
+    bearerToken:
+      type: http
+      scheme: bearer
+      description: A long random secret from the environment (HEALTH_TOKEN or CRON_SECRET), not a user token.
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: pfc_session
+      description: >
+        Signed session cookie set by the sign-in page. In production it is named
+        `__Host-pfc_session` (the browser then insists on Secure, Path=/ and no
+        Domain) and is HttpOnly, Secure and SameSite=Lax; elsewhere `pfc_session`. Checked against the database on
+        every request, so signing out, deactivating the account or changing the
+        password ends it at once.
+  parameters:
+    Id:
+      name: id
+      in: path
+      required: true
+      description: A positive integer. Anything else (letters, signs, decimals, `1e2`) is 400.
+      schema: { type: string, pattern: "^[0-9]+$" }
+  responses:
+    InvalidRequest:
+      description: The request was malformed. The message says which part.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+          example:
+            error: { message: slotId must be a positive integer., code: INVALID_REQUEST, requestId: 3f1c0c1e-6a43-4a43-9a52-0d8f0f5b9d11 }
+    Unauthenticated:
+      description: No valid session.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+          example:
+            error: { message: Sign in to continue., code: UNAUTHENTICATED, requestId: 3f1c0c1e-6a43-4a43-9a52-0d8f0f5b9d11 }
+    Forbidden:
+      description: The caller's role may not do this (`FORBIDDEN`), or a write came from another origin (`CROSS_ORIGIN`).
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+          example:
+            error: { message: Cross-origin requests are not allowed., code: CROSS_ORIGIN, requestId: 3f1c0c1e-6a43-4a43-9a52-0d8f0f5b9d11 }
+    NotFound:
+      description: It does not exist, or it is not the caller's.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+          example:
+            error: { message: That booking could not be found., code: NOT_FOUND, requestId: 3f1c0c1e-6a43-4a43-9a52-0d8f0f5b9d11 }
+    MethodNotAllowed:
+      description: The path exists but not for this method. `Allow` lists the methods that do.
+      headers:
+        Allow: { description: Allowed methods., schema: { type: string } }
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+          example:
+            error: { message: Method not allowed., code: METHOD_NOT_ALLOWED, requestId: 3f1c0c1e-6a43-4a43-9a52-0d8f0f5b9d11 }
+    Conflict:
+      description: The request conflicts with the current state (already booked, class full, wrong status, duplicate, in use).
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+          example:
+            error: { message: You are already booked into this class., code: CONFLICT, requestId: 3f1c0c1e-6a43-4a43-9a52-0d8f0f5b9d11 }
+    PayloadTooLarge:
+      description: The body is larger than the route allows.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+          example:
+            error: { message: Request body must be at most 100000 bytes., code: PAYLOAD_TOO_LARGE, requestId: 3f1c0c1e-6a43-4a43-9a52-0d8f0f5b9d11 }
+    UnsupportedMediaType:
+      description: The Content-Type, or the real type of an uploaded file, is not accepted.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+          example:
+            error: { message: Content-Type must be application/json., code: UNSUPPORTED_MEDIA_TYPE, requestId: 3f1c0c1e-6a43-4a43-9a52-0d8f0f5b9d11 }
+    RateLimited:
+      description: Too many requests. Wait `Retry-After` seconds.
+      headers:
+        Retry-After: { description: Seconds until the limit resets., schema: { type: integer, minimum: 1 } }
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+          example:
+            error: { message: Too many requests. Try again later., code: RATE_LIMITED, requestId: 3f1c0c1e-6a43-4a43-9a52-0d8f0f5b9d11 }
+    Internal:
+      description: Something unexpected failed. The detail is in the server log under the request id.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+          example:
+            error: { message: Could not complete the booking., code: INTERNAL, requestId: 3f1c0c1e-6a43-4a43-9a52-0d8f0f5b9d11 }
+    StorageError:
+      description: The file store failed.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+          example:
+            error: { message: File storage is not available right now. Please try again later., code: STORAGE_ERROR, requestId: 3f1c0c1e-6a43-4a43-9a52-0d8f0f5b9d11 }
+    StorageUnavailable:
+      description: The file store is not configured.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+          example:
+            error: { message: File storage is not available right now. Please try again later., code: UNAVAILABLE, requestId: 3f1c0c1e-6a43-4a43-9a52-0d8f0f5b9d11 }
+  schemas:
+    OutboxStats:
+      type: object
+      required: [pending, dead, deadLast24h, skipped, sentLast24h, oldestPendingAt, dailyCap]
+      properties:
+        pending: { type: integer, minimum: 0 }
+        dead: { type: integer, minimum: 0 }
+        deadLast24h:
+          type: integer
+          minimum: 0
+          description: >
+            Emails parked as dead in the last 24 hours (a permanent refusal by
+            the provider, or five failures in a row). The monitor alarms above 3.
+        skipped: { type: integer, minimum: 0 }
+        sentLast24h: { type: integer, minimum: 0 }
+        oldestPendingAt: { type: [string, "null"], format: date-time }
+        dailyCap: { type: integer, minimum: 1 }
+    HealthDetail:
+      type: object
+      required: [status, checkedAt, release, database, rateLimit, outbox, maintenance, configured]
+      properties:
+        status: { type: string, enum: [ok, degraded] }
+        checkedAt: { type: string, format: date-time }
+        release: { type: [string, "null"] }
+        database:
+          type: object
+          required: [latencyMs, sizeBytes, migrations, rowCounts]
+          properties:
+            latencyMs: { type: integer, minimum: 0 }
+            sizeBytes: { type: integer, minimum: 0 }
+            migrations:
+              type: object
+              required: [expected, applied, pending, newerThanThisRelease]
+              properties:
+                expected: { type: integer, minimum: 0 }
+                applied: { type: integer, minimum: 0 }
+                pending: { type: array, items: { type: string } }
+                newerThanThisRelease: { type: array, items: { type: string } }
+            rowCounts:
+              type: object
+              additionalProperties: { type: integer, minimum: 0 }
+        rateLimit:
+          type: object
+          required: [buckets]
+          properties:
+            buckets: { type: integer, minimum: 0 }
+        outbox: { $ref: "#/components/schemas/OutboxStats" }
+        maintenance:
+          type: object
+          required: [lastRunAt]
+          properties:
+            lastRunAt: { type: [string, "null"], format: date-time }
+        configured:
+          type: object
+          required: [email, publicBlob, privateBlob]
+          properties:
+            email: { type: boolean }
+            publicBlob: { type: boolean }
+            privateBlob: { type: boolean }
+    OutboxRun:
+      type: object
+      required: [claimed, sent, retry, dead, skipped, deferred]
+      properties:
+        claimed: { type: integer, minimum: 0 }
+        sent: { type: integer, minimum: 0 }
+        retry: { type: integer, minimum: 0 }
+        dead: { type: integer, minimum: 0 }
+        skipped: { type: integer, minimum: 0 }
+        deferred: { type: integer, minimum: 0 }
+    MaintenanceReport:
+      type: object
+      required: [resetTokensDeleted, bucketsDeleted, outbox, outboxPurged, failed]
+      properties:
+        resetTokensDeleted: { type: integer, minimum: 0 }
+        bucketsDeleted: { type: integer, minimum: 0 }
+        outbox:
+          type: object
+          required: [claimed, sent, retry, dead, skipped, deferred]
+          properties:
+            claimed: { type: integer, minimum: 0 }
+            sent: { type: integer, minimum: 0 }
+            retry: { type: integer, minimum: 0 }
+            dead: { type: integer, minimum: 0 }
+            skipped: { type: integer, minimum: 0 }
+            deferred: { type: integer, minimum: 0 }
+        outboxPurged: { type: integer, minimum: 0 }
+        failed: { type: array, items: { type: string } }
+    Status:
+      type: object
+      required: [status]
+      properties:
+        status: { type: string, enum: [ok, unavailable] }
+    ErrorCode:
+      type: string
+      enum:
+        - INVALID_REQUEST
+        - UNAUTHENTICATED
+        - FORBIDDEN
+        - CROSS_ORIGIN
+        - NOT_FOUND
+        - METHOD_NOT_ALLOWED
+        - CONFLICT
+        - PAYLOAD_TOO_LARGE
+        - UNSUPPORTED_MEDIA_TYPE
+        - RATE_LIMITED
+        - INTERNAL
+        - STORAGE_ERROR
+        - UNAVAILABLE
+    ErrorEnvelope:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [message, code]
+          properties:
+            message: { type: string }
+            code: { $ref: "#/components/schemas/ErrorCode" }
+            requestId: { type: string }
+    DayKey:
+      type: string
+      enum: [mon, tue, wed, thu, fri, sat, sun]
+    BookingStatus:
+      type: string
+      enum: [Pending, Confirmed, Failed, Completed, Cancelled, NoShow]
+    ClassProgramme:
+      type: object
+      required: [id, name, slug, description, level, durationMinutes]
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        slug: { type: string }
+        description: { type: string }
+        level: { type: string }
+        durationMinutes: { type: integer }
+    TimetableSlot:
+      type: object
+      required: [id, day, startsAt, durationMinutes, className, coachName, capacity, booked]
+      properties:
+        id: { type: integer }
+        day: { $ref: "#/components/schemas/DayKey" }
+        startsAt: { type: string, pattern: "^([01][0-9]|2[0-3]):[0-5][0-9]$" }
+        durationMinutes: { type: integer }
+        className: { type: string }
+        coachName: { type: string }
+        capacity: { type: integer }
+        booked: { type: integer, description: Confirmed bookings for the next session. }
+        coachId: { type: integer }
+        kind: { type: string, enum: [Group, Private, Kids, Fighters] }
+    Booking:
+      type: object
+      required: [id, classId, className, coachName, day, startsAt, sessionDate, status]
+      properties:
+        id: { type: integer }
+        classId: { type: integer }
+        className: { type: string }
+        coachName: { type: string }
+        day: { $ref: "#/components/schemas/DayKey" }
+        startsAt: { type: string }
+        sessionDate: { type: string, pattern: "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" }
+        status: { $ref: "#/components/schemas/BookingStatus" }
+    MyBookings:
+      type: object
+      required: [upcoming, past]
+      properties:
+        upcoming:
+          type: array
+          items: { $ref: "#/components/schemas/Booking" }
+        past:
+          type: array
+          items: { $ref: "#/components/schemas/Booking" }
+    CompetitionEvent:
+      type: object
+      required: [id, name, eventDate, venue, description, imageUrl, status]
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        eventDate: { type: string, format: date-time }
+        venue: { type: string }
+        description: { type: string }
+        imageUrl: { type: [string, "null"] }
+        status: { type: string, enum: [Scheduled, Completed, Cancelled] }
+    EventInput:
+      type: object
+      required: [name, venue, description, eventDate]
+      properties:
+        name: { type: string }
+        venue: { type: string }
+        description: { type: string, minLength: 10, maxLength: 2000 }
+        eventDate:
+          type: string
+          description: ISO 8601 with an explicit offset or Z, in the future.
+          pattern: "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}"
+        imageUrl: { type: [string, "null"], description: A public Blob store image URL. }
+    EventPatch:
+      type: object
+      minProperties: 1
+      properties:
+        name: { type: string }
+        venue: { type: string }
+        description: { type: string }
+        eventDate: { type: string }
+        imageUrl: { type: [string, "null"] }
+      additionalProperties: false
+    EventStatusChange:
+      type: object
+      required: [status]
+      properties:
+        status: { type: string, enum: [Cancelled, Completed] }
+      additionalProperties: false
+    Fighter:
+      type: object
+      required: [id, fullName, weightClass, wins, losses, draws, imageUrl]
+      properties:
+        id: { type: integer }
+        fullName: { type: string }
+        weightClass: { type: string }
+        wins: { type: integer, minimum: 0 }
+        losses: { type: integer, minimum: 0 }
+        draws: { type: integer, minimum: 0 }
+        imageUrl: { type: [string, "null"] }
+    BoutOffer:
+      type: object
+      required: [id, fighterId, fighterName, eventId, eventName, eventDate, venue, eventStatus, availability, opponentName, boutWeightClass, boutNotes, result, resultNotes, offeredAt, respondedAt]
+      properties:
+        id: { type: integer }
+        fighterId: { type: integer }
+        fighterName: { type: string }
+        eventId: { type: integer }
+        eventName: { type: string }
+        eventDate: { type: string, format: date-time }
+        venue: { type: string }
+        eventStatus: { type: string, enum: [Scheduled, Completed, Cancelled] }
+        availability: { type: string, enum: [Pending, Accepted, Declined] }
+        opponentName: { type: [string, "null"] }
+        boutWeightClass: { type: [string, "null"] }
+        boutNotes: { type: [string, "null"] }
+        result: { type: [string, "null"], enum: [Win, Loss, Draw, NoContest, null] }
+        resultNotes: { type: [string, "null"] }
+        offeredAt: { type: string, format: date-time }
+        respondedAt: { type: [string, "null"], format: date-time }
+    FighterOffers:
+      type: object
+      required: [fighter, pending, accepted, declined, past]
+      properties:
+        fighter: { $ref: "#/components/schemas/Fighter" }
+        pending:
+          type: array
+          items: { $ref: "#/components/schemas/BoutOffer" }
+        accepted:
+          type: array
+          items: { $ref: "#/components/schemas/BoutOffer" }
+        declined:
+          type: array
+          items: { $ref: "#/components/schemas/BoutOffer" }
+        past:
+          type: array
+          items: { $ref: "#/components/schemas/BoutOffer" }
+    FighterDocument:
+      type: object
+      required: [id, type, fileName, status, reviewNote, uploadedAt]
+      properties:
+        id: { type: integer }
+        type: { type: string, enum: [Medical, Licence, Other] }
+        fileName: { type: string }
+        status: { type: string, enum: [Pending, Approved, Rejected] }
+        reviewNote: { type: [string, "null"] }
+        uploadedAt: { type: string, format: date-time }

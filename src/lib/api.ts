@@ -2,6 +2,7 @@ import "server-only";
 
 import { NextResponse } from "next/server";
 
+import { jsonError } from "@/lib/apiEnvelope";
 import { readJson } from "@/lib/json";
 import { logger } from "@/lib/logger";
 import type { RateLimitResult } from "@/lib/rateLimit";
@@ -17,9 +18,7 @@ import type { ServiceResult, SessionUser } from "@/lib/types";
 
 export type JsonObject = Record<string, unknown>;
 
-export function jsonError(message: string, status: number): NextResponse {
-  return NextResponse.json({ error: { message } }, { status });
-}
+export { jsonError };
 
 /** A service result as a response: `{ data }` on success, the error otherwise. */
 export function jsonResult<T>(result: ServiceResult<T>): NextResponse {
@@ -52,7 +51,7 @@ export async function readJsonObject(
 
 /** The 429 for a denied rate-limit result, with a Retry-After header. */
 export function rateLimitedResponse(result: RateLimitResult): NextResponse {
-  const response = jsonError("Too many requests. Try again later.", 429);
+  const response = jsonError("Too many requests. Try again later.", 429, "RATE_LIMITED");
   response.headers.set("Retry-After", String(result.retryAfterSeconds));
   return response;
 }
