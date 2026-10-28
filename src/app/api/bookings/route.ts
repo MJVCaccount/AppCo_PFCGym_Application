@@ -1,39 +1,43 @@
-import { NextResponse } from "next/server";
-
-import { rateLimitedResponse } from "@/lib/api";
+import { jsonResult } from "@/lib/api";
+import { methodNotAllowed, userRoute } from "@/lib/apiHandler";
 import { readJson } from "@/lib/json";
-import { logger } from "@/lib/logger";
-import { checkLimit } from "@/lib/rateLimit";
-import { createBooking } from "@/lib/services/bookingService";
-import { getSession } from "@/lib/session";
-import { assertSameOrigin } from "@/lib/origin";
+import { createBooking, getMyBookings } from "@/lib/services/bookingService";
 
 export const dynamic = "force-dynamic";
 
 /**
+ * GET /api/bookings
+ *
+ * The signed-in member's bookings: `upcoming` (confirmed, not yet started,
+ * soonest first) and `past` (everything else, newest first; a confirmed
+ * booking whose day has passed reads as Completed). Staff get 403.
+ */
+export const GET = userRoute(
+  {
+    name: "GET /api/bookings",
+    failure: "Could not load your bookings.",
+    limit: "userRead",
+    unauthenticated: "Sign in to see your bookings.",
+  },
+  async ({ session }) => jsonResult(await getMyBookings(session)),
+);
+
+/**
  * POST /api/bookings  { "slotId": number }
  *
- * The HTTP counterpart to the `book` server action in actions/gym.ts — both
+ * The HTTP counterpart to the `book` server action in actions/gym.ts: both
  * call the same booking service, so the business rules live in one place.
  * This route is what a mobile client or an external caller would use; the
  * server action stays for the existing timetable page form.
  */
-export async function POST(request: Request) {
-  const blocked = assertSameOrigin(request);
-  if (blocked) return blocked;
-
-  try {
-    const session = await getSession();
-    if (!session) {
-      return NextResponse.json(
-        { error: { message: "Sign in to book a class." } },
-        { status: 401 },
-      );
-    }
-
-    const limit = await checkLimit("booking", String(session.id));
-    if (!limit.allowed) return rateLimitedResponse(limit);
-
+export const POST = userRoute(
+  {
+    name: "POST /api/bookings",
+    failure: "Could not complete the booking.",
+    unauthenticated: "Sign in to book a class.",
+    limit: "booking",
+  },
+  async ({ request, session }) => {
     const read = await readJson(request);
     if (!read.ok) return read.response;
     const body = read.data;
@@ -45,19 +49,9 @@ export async function POST(request: Request) {
 
     const result = await createBooking(session, slotId);
 
-    if (!result.ok) {
-      return NextResponse.json(
-        { error: { message: result.error } },
-        { status: result.status },
-      );
-    }
+    // The response body is the class as it now stands, not the booking row.
+    return jsonResult({ ...result, data: result.data?.slot });
+  },
+);
 
-    return NextResponse.json({ data: result.slot }, { status: result.status });
-  } catch (e) {
-    logger.error("POST /api/bookings failed", { error: e });
-    return NextResponse.json(
-      { error: { message: "Could not complete the booking." } },
-      { status: 500 },
-    );
-  }
-}
+export const { PUT, PATCH, DELETE } = methodNotAllowed(["GET", "POST"]);

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 
 import ClassCard from "@/components/ClassCard";
 import StickyCta from "@/components/StickyCta";
-import { getClasses } from "@/lib/repositories/programmesRepository";
+import { getClasses } from "@/lib/services/catalogueService";
 
 export const metadata: Metadata = {
   title: "Classes",

@@ -53,7 +53,7 @@ function tokenSentTo(address: string): string {
   assert.ok(mail, `an email went to ${address}`);
   const match = /\/reset-password\/([A-Za-z0-9_-]+)/.exec(mail.text ?? "");
   assert.ok(match, "the email holds a reset link");
-  return match[1];
+  return match[1]!;
 }
 
 function form(fields: Record<string, string>): FormData {
@@ -92,7 +92,7 @@ async function main() {
     assert.equal(known.data?.message, RESET_REQUESTED);
 
     assert.equal(stub.outbox.length, 1, "only the real account is emailed");
-    assert.equal(stub.outbox[0].to, member.email);
+    assert.equal(stub.outbox[0]!.to, member.email);
     assert.equal(
       await testDb.passwordResetToken.count({ where: { user: { email: "nobody@example.co.za" } } }),
       0,
@@ -119,11 +119,11 @@ async function main() {
 
     const rows = await testDb.passwordResetToken.findMany({ where: { userId: member.id } });
     assert.equal(rows.length, 1, "older unused tokens were deleted");
-    assert.equal(rows[0].tokenHash, sha256(token));
-    assert.notEqual(rows[0].tokenHash, token);
-    assert.equal(rows[0].usedAt, null);
+    assert.equal(rows[0]!.tokenHash, sha256(token));
+    assert.notEqual(rows[0]!.tokenHash, token);
+    assert.equal(rows[0]!.usedAt, null);
 
-    const minutes = (rows[0].expiresAt.getTime() - before) / 60_000;
+    const minutes = (rows[0]!.expiresAt.getTime() - before) / 60_000;
     assert.ok(minutes > 59 && minutes <= 60.5, `expires in ~60 minutes, got ${minutes}`);
 
     const everything = JSON.stringify(await testDb.passwordResetToken.findMany());
@@ -194,7 +194,7 @@ async function main() {
     const token = tokenSentTo(member.email);
     await testDb.passwordResetToken.updateMany({
       where: { userId: member.id },
-      data: { expiresAt: new Date(Date.now() - 1000) },
+      data: { createdAt: new Date(Date.now() - 7_200_000), expiresAt: new Date(Date.now() - 1000) },
     });
 
     assert.equal(await checkResetToken(token), false);
@@ -265,7 +265,7 @@ async function main() {
     const winner = ["Concurrent-One-1", "Concurrent-Two-2", "Concurrent-Three-3"][
       results.findIndex((r) => r.ok)
     ];
-    assert.equal((await validateCredentials(member.email, winner))?.id, member.id);
+    assert.equal((await validateCredentials(member.email, winner!))?.id, member.id);
   });
 
   await check("the form action redirects to the sign-in page on success", async () => {

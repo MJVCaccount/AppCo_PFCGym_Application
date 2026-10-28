@@ -57,9 +57,30 @@ function newToken(): { token: string; tokenHash: string } {
  * registered. For an unknown address the same amount of hashing is done on a
  * random token, so the response time does not give it away either.
  */
+/**
+ * Every answer to a reset request takes at least this long. An existing
+ * account costs a few database writes more than an unknown address; without a
+ * floor that difference (measured: about 15 ms) tells an attacker which
+ * addresses are registered.
+ */
+export const RESET_RESPONSE_FLOOR_MS = 300;
+
 export async function requestReset(
   email: unknown,
   now: Date = new Date(),
+): Promise<ServiceResult<{ message: string }>> {
+  const started = Date.now();
+  const result = await issueReset(email, now);
+
+  const wait = RESET_RESPONSE_FLOOR_MS - (Date.now() - started);
+  if (wait > 0) await new Promise((resolve) => setTimeout(resolve, wait));
+
+  return result;
+}
+
+async function issueReset(
+  email: unknown,
+  now: Date,
 ): Promise<ServiceResult<{ message: string }>> {
   const generic = succeed({ message: RESET_REQUESTED });
 
@@ -78,6 +99,9 @@ export async function requestReset(
       userId: user.id,
       tokenHash,
       expiresAt: new Date(now.getTime() + RESET_TOKEN_MINUTES * MINUTE),
+      // Written only when the account exists, so the audit trail (admins only)
+      // is the one place this fact is recorded; the response never says.
+      audit: { actorId: null, action: "password.reset.request" },
     });
     notifyPasswordReset(user, token, RESET_TOKEN_MINUTES);
   } catch (e) {

@@ -33,3 +33,6 @@ yarn-error.log*
 
 # Visual Studio IDE state
 .vs/
+
+# c8 report
+/coverage

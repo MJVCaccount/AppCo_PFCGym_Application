@@ -1,0 +1,60 @@
+name: Rollback drill
+
+# A rehearsal, run by hand. It promotes the PREVIOUS production deployment,
+# checks the site is ready, then promotes the release that was live back and
+# checks again. Production serves the older code for under a minute.
+#
+# Run it so the first time the rollback path runs is not during an incident.
+# It uses the same script as deploy.yml (scripts/ci/vercel-rollback.mjs, the
+# Vercel REST API: the CLI cannot be used with the deployment token).
+#
+# Migrations are forward-only: the older code runs against the newer schema,
+# which every migration is required to allow (see deploy.yml).
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Never two at once, and never cancelled halfway: a half-finished drill could
+# leave the older release live.
+concurrency:
+  group: rollback-drill
+  cancel-in-progress: false
+
+jobs:
+  drill:
+    runs-on: ubuntu-latest
+    # The "production" environment's required reviewer approves the run.
+    environment: production
+    env:
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 20
+
+      - name: Drill
+        id: drill
+        run: |
+          set -o pipefail
+          node scripts/ci/vercel-rollback.mjs drill | tee drill.txt
+
+      - name: Summary
+        if: always()
+        env:
+          DRILL_OUTCOME: ${{ steps.drill.outcome }}
+        run: |
+          {
+            echo "## Rollback drill"
+            echo
+            echo "Outcome: $DRILL_OUTCOME"
+            echo
+            echo '```'
+            cat drill.txt 2>/dev/null || echo "(no output)"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

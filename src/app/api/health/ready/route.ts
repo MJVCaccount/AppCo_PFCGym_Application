@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
-import { logger } from "@/lib/logger";
-import { pingDatabase } from "@/lib/repositories/healthRepository";
+import { methodNotAllowed, publicRoute } from "@/lib/apiHandler";
+import { isReady } from "@/lib/services/healthService";
 
 export const dynamic = "force-dynamic";
 
@@ -10,12 +10,12 @@ export const dynamic = "force-dynamic";
  * smoke test. The failure body carries no detail on purpose; the reason is in
  * the server log.
  */
-export async function GET() {
-  try {
-    await pingDatabase();
-    return NextResponse.json({ status: "ok" });
-  } catch (e) {
-    logger.error("Readiness check failed", { error: e });
-    return NextResponse.json({ status: "unavailable" }, { status: 503 });
-  }
-}
+export const GET = publicRoute(
+  { name: "GET /api/health/ready", failure: "Readiness check failed." },
+  async () =>
+    (await isReady())
+      ? NextResponse.json({ status: "ok" })
+      : NextResponse.json({ status: "unavailable" }, { status: 503 }),
+);
+
+export const { POST, PUT, PATCH, DELETE } = methodNotAllowed(["GET"]);

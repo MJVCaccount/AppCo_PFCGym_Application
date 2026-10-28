@@ -4,7 +4,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import RegisterForm from "@/components/RegisterForm";
-import { getPlans } from "@/lib/repositories/plansRepository";
+import { getPlans } from "@/lib/services/catalogueService";
 import { getSession } from "@/lib/session";
 import { firstParam, type SearchParams } from "@/lib/types";
 

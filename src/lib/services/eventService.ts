@@ -439,9 +439,14 @@ export async function respondToOffer(
     );
 
     if (!result.ok) {
-      return result.reason === "not-found"
-        ? fail(404, NOT_FOUND_OFFER)
-        : fail(409, "This event is no longer open for answers.");
+      switch (result.reason) {
+        case "not-found":
+          return fail(404, NOT_FOUND_OFFER);
+        case "result-recorded":
+          return fail(409, "A result has been recorded, so this answer can no longer change.");
+        case "event-closed":
+          return fail(409, "This event is no longer open for answers.");
+      }
     }
 
     return succeed(result.offer);

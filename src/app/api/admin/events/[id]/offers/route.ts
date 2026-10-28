@@ -1,11 +1,6 @@
-import {
-  jsonResult,
-  pathId,
-  readJsonObject,
-  withSession,
-} from "@/lib/api";
+import { jsonResult, pathId, readJsonObject } from "@/lib/api";
+import { methodNotAllowed, userRoute } from "@/lib/apiHandler";
 import { offerBout } from "@/lib/services/eventService";
-import { assertSameOrigin } from "@/lib/origin";
 
 export const dynamic = "force-dynamic";
 
@@ -15,25 +10,21 @@ export const dynamic = "force-dynamic";
  *
  * Admin only. The optional fields may be left out, null or empty.
  */
-export async function POST(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> },
-) {
-  const blocked = assertSameOrigin(request);
-  if (blocked) return blocked;
+export const POST = userRoute(
+  {
+    name: "POST /api/admin/events/[id]/offers",
+    failure: "Could not create the offer.",
+    limit: "admin",
+  },
+  async ({ request, session, params }) => {
+    const read = await readJsonObject(request);
+    if (!read.ok) return read.response;
 
-  return withSession(
-    "POST /api/admin/events/[id]/offers",
-    "Could not create the offer.",
-    async (session) => {
-      const read = await readJsonObject(request);
-      if (!read.ok) return read.response;
-      const body = read.body;
+    const { id } = await params();
+    return jsonResult(
+      await offerBout(session, pathId(id ?? ""), read.body.fighterId, read.body),
+    );
+  },
+);
 
-      const { id } = await params;
-      return jsonResult(
-        await offerBout(session, pathId(id), body.fighterId, body),
-      );
-    },
-  );
-}
+export const { GET, PUT, PATCH, DELETE } = methodNotAllowed(["POST"]);

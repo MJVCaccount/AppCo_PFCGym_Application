@@ -132,8 +132,12 @@ async function main() {
     store.set("pfc_session", signedCookie({ ...admin, sv: "0" }));
     assert.equal(await getSession(), null, "sv must be a number");
 
+    const exp = Math.floor(Date.now() / 1000) + 3600;
+    store.set("pfc_session", signedCookie({ ...admin, sv: 0, exp }));
+    assert.deepEqual(await getSession(), admin, "the same cookie with a numeric sv and an expiry works");
+
     store.set("pfc_session", signedCookie({ ...admin, sv: 0 }));
-    assert.deepEqual(await getSession(), admin, "the same cookie with a numeric sv works");
+    assert.equal(await getSession(), null, "a signed cookie with no expiry is refused");
   });
 
   await check("a cookie issued under an older sessionVersion is rejected", async () => {

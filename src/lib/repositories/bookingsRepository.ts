@@ -189,7 +189,13 @@ export async function createBooking(
     if (existing && !reusable) return { ok: false, reason: "duplicate" };
 
     if (confirmed >= gymClass.capacity) {
-      const failed = { status: "Failed", failureReason: CLASS_FULL_REASON } as const;
+      // cancelledAt is cleared: a row that was Cancelled and is now Failed is
+      // no longer a cancellation, and only a Cancelled row carries the stamp.
+      const failed = {
+        status: "Failed",
+        failureReason: CLASS_FULL_REASON,
+        cancelledAt: null,
+      } as const;
 
       if (existing) {
         await tx.booking.update({ where: { id: existing.id }, data: failed });

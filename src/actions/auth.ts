@@ -3,21 +3,17 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 
-import { ERROR_CODES, mapPrismaError } from "@/lib/errors";
-import { getPlan } from "@/lib/repositories/plansRepository";
-import { notifyWelcome } from "@/lib/services/notificationService";
+import {
+  authenticate,
+  recordLoginLockout,
+  register as registerMember,
+} from "@/lib/services/authService";
 import {
   RESET_INVALID,
   RESET_REQUESTED,
   requestReset,
   resetPassword,
 } from "@/lib/services/passwordService";
-import {
-  createMember,
-  findByEmail,
-  toSessionUser,
-  validateCredentials,
-} from "@/lib/repositories/usersRepository";
 import {
   checkLimit,
   clearLimit,
@@ -27,7 +23,7 @@ import {
 } from "@/lib/rateLimit";
 import { safeReturnPath } from "@/lib/returnUrl";
 import { createSession, destroySession, getSession } from "@/lib/session";
-import type { Role, UserAccount } from "@/lib/types";
+import type { Role } from "@/lib/types";
 import {
   type FormState,
   validate,
@@ -39,7 +35,7 @@ export async function login(
   data: FormData,
 ): Promise<FormState> {
   const values = valuesFrom(data, ["email"]);
-  const errors = validate(data, { email: "email", password: "password" });
+  const errors = validate(data, { email: "email", password: "loginPassword" });
 
   if (Object.keys(errors).length > 0) {
     return { ok: false, errors, values };
@@ -50,10 +46,15 @@ export async function login(
   // attacker nothing about which addresses have accounts.
   const ip = await currentClientIp();
   const loginId = `${ip}|${String(data.get("email")).trim().toLowerCase()}`;
-  const denied = firstDenied(
-    await checkLimit("loginIpEmail", loginId),
-    await checkLimit("loginIp", ip),
-  );
+  const byEmail = await checkLimit("loginIpEmail", loginId);
+  const byIp = await checkLimit("loginIp", ip);
+  if (byEmail.justExceeded) {
+    await recordLoginLockout({ policy: "loginIpEmail", email: String(data.get("email")), ip });
+  }
+  if (byIp.justExceeded) {
+    await recordLoginLockout({ policy: "loginIp", email: "", ip });
+  }
+  const denied = firstDenied(byEmail, byIp);
   if (denied) {
     return {
       ok: false,
@@ -62,30 +63,21 @@ export async function login(
     };
   }
 
-  let user: UserAccount | null;
-  try {
-    user = await validateCredentials(
-      String(data.get("email")),
-      String(data.get("password")),
-    );
-  } catch (e) {
-    return { ok: false, message: mapPrismaError(e).message, values };
-  }
+  // The service answers a wrong password and an unknown email identically, so
+  // the message tells an attacker nothing about which addresses have accounts.
+  const result = await authenticate(
+    String(data.get("email")),
+    String(data.get("password")),
+  );
 
-  if (!user) {
-    // Deliberately vague. Saying which of the two was wrong tells an attacker
-    // which email addresses have accounts.
-    return {
-      ok: false,
-      message: "Email or password is incorrect.",
-      values,
-    };
+  if (!result.ok || !result.data) {
+    return { ok: false, message: result.error, values };
   }
 
   // The real owner is back in: forget the failed attempts for this ip+email.
   await clearLimit("loginIpEmail", loginId);
 
-  await createSession(toSessionUser(user));
+  await createSession(result.data);
   revalidatePath("/", "layout");
 
   // Only follow a path on this site. An absolute URL here would be an open
@@ -122,48 +114,21 @@ export async function register(
     };
   }
 
-  const email = String(data.get("email"));
-  const emailTaken: FormState = {
-    ok: false,
-    errors: { email: "That email is already registered." },
-    values,
-  };
+  const result = await registerMember({
+    fullName: String(data.get("fullName")),
+    email: String(data.get("email")),
+    phone: String(data.get("phone") ?? ""),
+    password: String(data.get("password")),
+    planId: String(data.get("planId") ?? ""),
+  });
 
-  let user: UserAccount;
-  try {
-    if (await findByEmail(email)) return emailTaken;
-
-    const rawPlan = String(data.get("planId") ?? "");
-    const planId = rawPlan ? Number(rawPlan) : null;
-
-    if (planId !== null && !(await getPlan(planId))) {
-      return {
-        ok: false,
-        errors: { planId: "Choose one of the listed plans." },
-        values,
-      };
-    }
-
-    user = await createMember({
-      email,
-      fullName: String(data.get("fullName")),
-      phone: String(data.get("phone") ?? ""),
-      password: String(data.get("password")),
-      planId,
-    });
-  } catch (e) {
-    const error = mapPrismaError(e);
-
-    // Two sign-ups with the same address can both pass the check above. The
-    // unique index stops the second one, and it gets the same field error.
-    if (error.code === ERROR_CODES.conflict) return emailTaken;
-
-    return { ok: false, message: error.message, values };
+  if (!result.ok || !result.data) {
+    return result.field
+      ? { ok: false, errors: { [result.field]: result.error ?? "" }, values }
+      : { ok: false, message: result.error, values };
   }
 
-  notifyWelcome(user);
-
-  await createSession(toSessionUser(user));
+  await createSession(result.data);
   revalidatePath("/", "layout");
   redirect("/dashboard?welcome=1");
 }

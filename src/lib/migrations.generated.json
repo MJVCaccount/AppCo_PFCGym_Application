@@ -1,0 +1,9 @@
+[
+  "20261004015138_init",
+  "20261004015208_integrity_checks",
+  "20261004115908_session_version",
+  "20261004140000_rate_limit",
+  "20261004160000_participation_event_index",
+  "20261027120100_member_search_trigram",
+  "20261028090000_email_outbox"
+]

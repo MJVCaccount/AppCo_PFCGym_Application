@@ -1,0 +1,72 @@
+name: Outbox drain
+
+# Hourly, asks production to try the emails that are due again (GET
+# /api/cron/outbox). Vercel's free plan allows one cron a day, so this is what
+# makes a failed email come back within about an hour instead of a day.
+#
+# What "hourly" means here: GitHub may delay a scheduled run, may skip one when
+# it is busy, and DISABLES scheduled workflows after 60 days without repository
+# activity (a commit, issue or pull request re-enables them). Retries therefore
+# also happen at the next email the app sends and at least daily through the
+# Vercel cron; this workflow is the middle layer, not the only one.
+#
+# Needs (repository Settings > Secrets and variables > Actions):
+#   variable PRODUCTION_URL                    e.g. https://pfc-gym.vercel.app
+#   secret   CRON_SECRET                       the same value as in Vercel
+#   secret   VERCEL_AUTOMATION_BYPASS_SECRET   only if Deployment Protection is on
+on:
+  schedule:
+    - cron: "23 * * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+# A slow run must not pile up behind the next one.
+concurrency:
+  group: outbox-drain
+  cancel-in-progress: false
+
+jobs:
+  drain:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Drain the outbox
+        env:
+          PRODUCTION_URL: ${{ vars.PRODUCTION_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+        run: |
+          if [ -z "$PRODUCTION_URL" ]; then
+            echo "::error::Set the repository variable PRODUCTION_URL."
+            exit 1
+          fi
+          if [ -z "$CRON_SECRET" ]; then
+            echo "::error::Set the repository secret CRON_SECRET (the same value as in Vercel)."
+            exit 1
+          fi
+
+          # The secrets go through a file, never a command line.
+          umask 077
+          printf 'authorization: Bearer %s\n' "$CRON_SECRET" > headers.txt
+          if [ -n "$BYPASS_SECRET" ]; then
+            printf 'x-vercel-protection-bypass: %s\n' "$BYPASS_SECRET" >> headers.txt
+          fi
+
+          status=0
+          curl --fail-with-body --silent --show-error \
+            --max-time 60 --retry 2 --retry-delay 10 \
+            -H @headers.txt \
+            "${PRODUCTION_URL%/}/api/cron/outbox" > result.json || status=$?
+          rm -f headers.txt
+
+          cat result.json
+          echo
+          {
+            echo "## Outbox drain"
+            echo
+            echo '```json'
+            cat result.json
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit $status

@@ -48,7 +48,14 @@ npm run dev                  # http://localhost:3000
 | `npm run build` / `npm start` | Production build, and serve it |
 | `npm run lint` | `next lint` |
 | `npm run typecheck` | `tsc --noEmit` |
-| `npm test` | All 16 test files (471 checks), against `TEST_DATABASE_URL` (empties every table there) |
+| `npm test` | All 29 test files (656 checks), against `TEST_DATABASE_URL` (empties every table there) |
+| `npm run test:concurrency` | Only the booking race tests (30 members for 3 places, five rounds) |
+| `npm run test:architecture` | Only the layering test |
+| `npm run test:properties` | Only the property tests (fast-check); `FC_RUNS=3000` for more, `FC_SEED=<seed>` to replay a failure |
+| `npm run coverage` | `npm test` under c8; text, summary and lcov reports for `src/lib` in `coverage/` |
+| `npm run db:verify` | Read-only integrity check of the database `DATABASE_URL` names (exit 1 on any finding) |
+| `npm run openapi:build` / `openapi:lint` / `openapi:docs` | Write `src/lib/openapi.json` from `docs/openapi.yaml`; lint it; render `docs/api.html` (the last two use a temporary Redocly download) |
+| `npm run pentest` | Scripted attacks against a **local** production build (`tools/pentest/attack.ts`; refuses any other target) |
 | `npm run ci` | lint, typecheck, test and build, as CI does |
 | `npm run db:migrate` | `prisma migrate dev` (create a migration) |
 | `npm run db:deploy` | `prisma migrate deploy` (apply migrations) |
@@ -106,6 +113,13 @@ Every variable the code reads. Copy `.env.example` to `.env` (local) or set them
 | `PRIVATE_BLOB_STORE_ID` | For documents | Vercel Blob store for fighters' medical and licence documents (private) |
 | `PUBLIC_BLOB_READ_WRITE_TOKEN`, `PRIVATE_BLOB_READ_WRITE_TOKEN` | Local only | Optional tokens for the two stores; leave blank on Vercel (it uses OIDC) |
 | `CSP_REPORT_ONLY` | No | `1` sends the Content-Security-Policy as report-only |
+| `HEALTH_TOKEN` | For `/api/health/detail` and the monitor | At least 32 random characters. `GET /api/health/detail` needs `Authorization: Bearer <token>`. Unset or shorter, the route answers 404 |
+| `CRON_SECRET` | For the daily job | At least 32 random characters. Vercel Cron sends it as a bearer token to `GET /api/cron/maintenance`. Unset or shorter, the route answers 404 |
+| `SECURITY_CONTACT` | No | Contact in `/.well-known/security.txt` (an email or an https address). Falls back to `CONTACT_INBOX`; with neither the file answers 404 |
+| `EMAIL_SKIP` | No | Comma-separated addresses or domains that must never reach the email provider (case and spaces ignored; a domain matches only that domain). Production value: `member@pfc.co.za,fighter@pfc.co.za,marcus@pfc.co.za,sofia@pfc.co.za,admin@pfc.co.za`. The demo accounts use addresses that the sandbox sender cannot deliver to, so mail to them would only be refused by the provider and count against the daily limit. Skipped mail is not a failure: it is marked Skipped in the outbox, is never retried, and is not counted as pending or as a dead letter. |
+| `EMAIL_DAILY_CAP` | No | Whole number 1 to 100 (default 90). The outbox stops sending at this many a day and holds the rest for the next UTC day (Resend's free plan allows 100) |
+| `SLOW_QUERY_MS` | No | A database query slower than this is logged as a warning (default 500) |
+| `API_ACCESS_LOG` | No | `0` switches off the one access-log line per API request (the tests do) |
 | `RATE_LIMIT_MULTIPLIER` | No | Whole number 1 to 20 (default 1, anything else ignored). Multiplies every rate limit, for a busy day such as the EXPO when a crowd shares one network address. Set it in the Vercel dashboard; set it back to 1 afterwards |
 | `SEED_ALLOWED_HOSTS` | Local | Hosts the seed may write to besides localhost (the Neon dev host) |
 | `SEED_CONFIRM_HOST` | One command | The host of a database to seed once on purpose; never saved in a file |
@@ -177,10 +191,14 @@ Test by dragging the window, or Chrome DevTools → `Ctrl+Shift+M`.
 
 ## Architecture notes
 
-**Layers.** A page or action never touches Prisma. Pages and actions call a
-service (`src/lib/services`), which validates, checks the caller's role and
-applies the business rules, and which calls a repository
-(`src/lib/repositories`), the only code that imports Prisma. Anything that
+**Layers.** A page, component, action or route never touches a repository or Prisma.
+They call a service (`src/lib/services`), which validates, checks the caller's role and
+applies the business rules and returns a `ServiceResult` (`ok`, `status`, `error`,
+`data`), and which calls a repository (`src/lib/repositories`), the only code that
+imports Prisma. `tests/architecture.test.ts` fails the build if that is ever broken; the
+only exceptions are `session.ts` and `rateLimit.ts`, which each use one narrow repository
+and say so in a comment. Plain reads for public pages live in `catalogueService` and
+`timetableService`; sign-in and sign-up in `authService`. Anything that
 depends on a prior read (capacity, uniqueness, status changes) runs inside
 `prisma.$transaction`, usually with a row lock (`FOR UPDATE`). Unique and
 not-found errors (P2002, P2025) are mapped to 409 and 404 in
@@ -195,7 +213,47 @@ the password toggle, the submit button and the scroll reveal.
 **Server actions and JSON routes.** Forms post to server actions (Next adds an
 origin check). The same services back the JSON routes under `/api`, for a
 mobile client or an external caller. Every success is `{ "data": ... }` and
-every error `{ "error": { "message": ... } }`.
+every error `{ "error": { "message": ..., "code": ..., "requestId": ... } }`; `code` is
+stable (`NOT_FOUND`, `CONFLICT`, `RATE_LIMITED`, ...), `requestId` equals the
+`X-Request-Id` response header and the log line.
+
+**One wrapper for every JSON route.** `publicRoute` and `userRoute`
+(`src/lib/apiHandler.ts`) do the same things in the same order: request id, same-origin
+check on writes, session, rate limit, the route, then `X-Request-Id`, `Cache-Control`
+and one access-log line (method, route, status, milliseconds; no query string, no body).
+A wrong method on a real route is a JSON 405 with `Allow`; an unknown path under
+`/api` is a JSON 404. Public catalogue reads are cacheable for 60 seconds; everything
+with user data, the timetable and every error is `no-store`.
+
+**API contract.** `docs/openapi.yaml` (OpenAPI 3.1) describes every route, served as
+`GET /api/openapi.json` and rendered to `docs/api.html`. `tests/openapi.test.ts` fails
+when a route or method is missing from the spec or the spec lists one that does not
+exist, and checks real responses (success and the common failures) against their schemas.
+
+**Email outbox.** Mail that carries no secret (welcome, bookings, bout offers, event
+cancellation, document review, enquiries) is stored in `EmailOutbox` first and sent
+second, so an outage or the provider's daily cap delays it instead of losing it. Failures
+become due again after 5, 30, 120 and 360 minutes (then park as dead letters; a permanent
+refusal, an HTTP 4xx other than 408 and 429, parks at once with its reason, and a `.invalid`
+address, or one on the `EMAIL_SKIP` list, is skipped without calling the provider). Due means *may* be retried, not *will be*:
+retries happen at the next email the app sends, hourly while the Outbox drain workflow runs
+(GitHub may delay a scheduled run and disables schedules after 60 days without repository
+activity), and at least daily through the Vercel cron. Sending stops at
+`EMAIL_DAILY_CAP` (default 90) and resumes the next UTC day. Password-reset and invite
+mail are sent directly (their links hold the raw token, so no copy is kept) and only
+counted. The daily maintenance job (`GET /api/cron/maintenance`, 03:00 UTC) drains the
+outbox too, and deletes expired reset tokens and rate-limit counters, and purges old rows.
+
+**Observability.** `GET /api/health` (liveness) and `/api/health/ready` (database) are
+public and minimal. `GET /api/health/detail` (bearer `HEALTH_TOKEN`) adds database
+latency and size, applied versus expected migrations, row counts, outbox state, and
+whether email and storage are configured. A query over 500 ms logs a `Slow query`
+warning with the request id. `.github/workflows/monitor.yml` checks production every 15
+minutes and keeps one `incident` issue.
+
+**Integrity.** CHECK constraints guard the simple rules; `npm run db:verify`
+(`prisma/verifyIntegrity.ts`) checks 20 more, including subtype rows and bookings over
+capacity, read-only, and runs in CI.
 
 **Validation runs on the server, always.** `src/lib/validation.ts` holds the
 rules and `src/lib/text.ts` the shared `optionalText()`: an optional input may
@@ -284,7 +342,11 @@ no Redis. Keys are SHA-256 hashes, so no email or address is stored in plain
 text. Limits: login 5 per 15 min per ip+email and 30 per 15 min per ip (a
 successful login clears the ip+email bucket), register 5/h, forgot-password
 3/h per ip and per email, reset-password 10/h, contact form 5/h, bookings 30
-per 10 min per user, uploads 20/h per user. `RATE_LIMIT_MULTIPLIER` (1 to 20) scales every count for a busy day. If the database is down the limiter
+per 10 min per user, uploads 20/h per user. Every other route has a generous limit too:
+public reads 120/min per address, own-data reads 120/min per user, cancel and
+answer-an-offer 30 per 10 min, document delete 30/h, document download 60 per 10 min,
+admin writes 120 per 10 min, sign-out-everywhere 5/h. The full table is
+`POLICIES` in `src/lib/rateLimit.ts`. `RATE_LIMIT_MULTIPLIER` (1 to 20) scales every count for a busy day. If the database is down the limiter
 fails open for public pages and closed for sign-in and password flows.
 
 **Request bodies.** `readJson` rejects a non-JSON Content-Type (415), a body over
@@ -352,11 +414,12 @@ page load and no layout shift as the font swaps in.
 
 ## Tests
 
-Sixteen files in `tests/` (471 checks), run in order by `npm test`. Most of them talk to a
+Twenty-nine files in `tests/` (656 checks), run in order by `npm test`. Most of them talk to a
 real PostgreSQL database that the tests empty and re-seed, so `TEST_DATABASE_URL`
 must name a database you do not mind losing (it must differ from `DATABASE_URL`
 and `DIRECT_URL`, or the tests refuse to run). "resend" and "@vercel/blob" are
 replaced by in-memory stubs, so no test sends an email or touches a real store.
+The per-file table is [docs/task3/test-summary.md](docs/task3/test-summary.md).
 
 ```bash
 # One Postgres 16 container with the two databases CI uses, then:
@@ -374,6 +437,12 @@ npm test
 | `api`, `fighters`, `admin`, `uploads`, `password`, `email` | Booking and cancellation routes, bout offers and results, admin and coach services, uploads and the private store, password reset, email templates and queue |
 | `hostile-input`, `security`, `rate-limit-multiplier`, `seed-guard`, `seed-passwords` | Hostile input on every service, rate limiter, origin and body checks, CSP and headers, seed refusal rules and seed passwords |
 | `flows` | One scripted scenario each for a guest, a new member, a member on a full class, a fighter, a coach, an admin (including the `/admin` redirect) and a hostile user |
+| `architecture`, `booking-concurrency`, `integrity` | The layering rule, 30 members racing for 3 places over five rounds, and real flows that must leave no row in a forbidden state |
+| `api-handler`, `openapi` | The shared route wrapper, error envelope, cache headers, 404 and 405; the OpenAPI contract against the code and real responses |
+| `hardening`, `pentest-regressions` | Password rule, cookie, rate limits, audit rows, sign-out-everywhere, erasure, upload checks; one test per penetration-test finding |
+| `outbox`, `pipeline` | Email outbox with its failure classes, health detail, the maintenance and outbox-drain jobs, slow-query log; the rollback script against a fake Vercel API, the monitor's decisions, the shape of every workflow and that every action is pinned to a commit SHA |
+| `email-skip` | The `EMAIL_SKIP` parser (exact address, domain, case, spaces, empty entries, suffix and prefix lookalikes) and that a listed address ends Skipped in the outbox without a provider call, without logging the address, and without counting as pending or dead |
+| `properties` | Property tests (fast-check, no database) for the password and validation rules, the session cookie, upload inspection, file names, the redirect guard and the email backoff |
 
 ---
 
@@ -397,14 +466,29 @@ pipeline described here is the pipeline that runs.
 `main` and on every push to them. One job per concern, so a failure says what
 broke: `lint`, `typecheck`, `build`, `test` (a throwaway `postgres:16`
 container, `prisma migrate deploy`, then `npm test`; never a real Neon
-database) and `audit` (`npm audit --omit=dev --audit-level=high`). A newer push
+database), `audit` (`npm audit --omit=dev --audit-level=high`) and `openapi`
+(lint, and the served JSON is current). The `test` job runs on Node 20 and 24, checks
+migration drift against a shadow database, seeds and runs `npm run db:verify`, and on Node
+24 runs `npm run coverage` and keeps the report. A newer push
 to the same ref cancels the older run.
+
+**`.github/workflows/codeql.yml`** scans JavaScript and TypeScript on pull requests,
+pushes and weekly. **`.github/workflows/monitor.yml`** checks production every 15
+minutes. **`.github/workflows/outbox-drain.yml`** asks production to try the emails that are due
+again, hourly (GitHub may delay a scheduled run and disables schedules after 60 days without
+repository activity). **`.github/workflows/rollback-drill.yml`** is a manual rehearsal of the
+rollback below. **`.github/workflows/dependency-review.yml`** reviews dependency changes in pull
+requests. Every `uses:` in every workflow is pinned to a full commit SHA with its tag in a
+comment (a test fails on an unpinned one) and Dependabot keeps them current with a 7-day
+cooldown. CI also runs `gitleaks` (the whole git history) and `semgrep` (OSS, metrics off, the
+TypeScript, Next.js, OWASP top ten and secrets packs).
 
 **`.github/workflows/deploy.yml`** starts only when CI has finished
 successfully for a push (`workflow_run`). For `main`: pull the production
 settings, `vercel build --prod`, `prisma migrate deploy`, `vercel deploy
 --prebuilt --prod`, then a smoke test that must get a 200 from
-`/api/health/ready`. The job uses the `production` GitHub Environment, which
+`/api/health/ready`. If that smoke test fails, the deployment that was live before is
+promoted back (see Rolling back). The job uses the `production` GitHub Environment, which
 holds it until a required reviewer approves. For `develop` it does the same
 against preview. Deploys never cancel each other half-way: one runs at a time
 per branch and the next waits.
@@ -484,9 +568,13 @@ or drop something the running release still reads.
 
 ### Rolling back
 
-Redeploy the previous Vercel deployment: in the Vercel dashboard open
-Deployments, pick the last good one and choose "Promote to Production" (or run
-`vercel rollback`). That restores the old code in seconds. Migrations only move
-forward and are not undone, which is why the rule above matters: the old code
-has to keep working on the new schema. To undo a schema change, ship a new
-migration that reverses it.
+**Automatically.** `deploy.yml` records the id of the live production deployment before
+it changes anything. If the smoke test then fails, it promotes that deployment back
+through the Vercel REST API (`scripts/ci/vercel-rollback.mjs`; the CLI cannot be used
+because the deployment token has no user record), waits until the project reports it live,
+checks `/api/health/ready` on the production domain, writes a step summary, and fails the
+job. **By hand:** the Vercel dashboard, Deployments, "Promote to Production" on the last
+good one. **Rehearsal:** run the *Rollback drill* workflow (it asks for the production
+approval). Migrations only move forward and are not undone, which is why the rule above
+matters: the old code has to keep working on the new schema. To undo a schema change, ship
+a new migration that reverses it.

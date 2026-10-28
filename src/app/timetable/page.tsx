@@ -5,7 +5,7 @@ import { book } from "@/actions/gym";
 import Alert from "@/components/Alert";
 import StickyCta from "@/components/StickyCta";
 import { currentDayAndHour } from "@/lib/dates";
-import { getSlotsFor } from "@/lib/repositories/timetableRepository";
+import { getSlotsFor } from "@/lib/services/timetableService";
 import { getSession } from "@/lib/session";
 import {
   DAY_NAMES,

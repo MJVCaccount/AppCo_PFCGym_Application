@@ -611,7 +611,7 @@ async function main() {
 
   await check("a cancelled event takes no results", async () => {
     const lost = await testDb.eventParticipation.create({
-      data: { fighterId: fighter.id, eventId: cancelled.id, availability: "Accepted" },
+      data: { fighterId: fighter.id, eventId: cancelled.id, availability: "Accepted", respondedAt: new Date() },
     });
     const result = await recordResult(admin, lost.id, "Win", null, afterFightNight);
     assert.equal(result.status, 409);
@@ -672,7 +672,7 @@ async function main() {
   await check("GET /api/events returns only Scheduled future events, soonest first", async () => {
     await destroySession();
 
-    const res = await eventsRoute();
+    const res = await eventsRoute(new Request("http://localhost/api/test"));
     assert.equal(res.status, 200);
     const names = (await res.json()).data.map((e: { name: string }) => e.name);
 
@@ -692,7 +692,7 @@ async function main() {
         description: "Scheduled, but its date has gone by.",
       },
     });
-    const again = await (await eventsRoute()).json();
+    const again = await (await eventsRoute(new Request("http://localhost/api/test"))).json();
     assert.equal(again.data.length, 3);
     assert.ok(again.data.every((e: { status: string }) => e.status === "Scheduled"));
     assert.ok(
@@ -709,7 +709,7 @@ async function main() {
     await destroySession();
 
     for (const res of [
-      await myOffersRoute(),
+      await myOffersRoute(new Request("http://localhost/api/test")),
       await respondRoute(
         jsonRequest("POST", { response: "Accepted" }),
         idParams(seededOffer.id),
@@ -722,10 +722,10 @@ async function main() {
 
   await check("GET /api/fighter/offers is 403 for a member and 200 for a fighter", async () => {
     await createSession(member);
-    assert.equal((await myOffersRoute()).status, 403);
+    assert.equal((await myOffersRoute(new Request("http://localhost/api/test"))).status, 403);
 
     await createSession(fighter);
-    const res = await myOffersRoute();
+    const res = await myOffersRoute(new Request("http://localhost/api/test"));
     assert.equal(res.status, 200);
     const body = await res.json();
     assert.equal(body.data.fighter.id, fighter.id);
@@ -929,7 +929,7 @@ async function main() {
   await check("a past bout's result can be recorded through the route", async () => {
     // An accepted bout at an event that has genuinely happened.
     const fought = await testDb.eventParticipation.create({
-      data: { fighterId: fighter.id, eventId: pastEvent.id, availability: "Accepted" },
+      data: { fighterId: fighter.id, eventId: pastEvent.id, availability: "Accepted", respondedAt: new Date() },
     });
 
     await createSession(admin);

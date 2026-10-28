@@ -1,6 +1,7 @@
 import "server-only";
 
 import { queueEmail } from "@/lib/email/queue";
+import { queueOutboxEmail, recordDirectSend } from "@/lib/services/outboxService";
 import * as templates from "@/lib/email/templates";
 import { DAY_NAMES, type BoutOffer, type DayKey } from "@/lib/types";
 
@@ -16,7 +17,7 @@ export interface Recipient {
 }
 
 export function notifyWelcome(user: Recipient): void {
-  queueEmail(() => ({
+  queueOutboxEmail("welcome", () => ({
     to: user.email,
     ...templates.welcome({ fullName: user.fullName }),
   }));
@@ -32,7 +33,7 @@ export function notifyBookingConfirmed(
     sessionDate: string;
   },
 ): void {
-  queueEmail(() => ({
+  queueOutboxEmail("booking.confirmed", () => ({
     to: user.email,
     ...templates.bookingConfirmed({
       fullName: user.fullName,
@@ -54,7 +55,7 @@ export function notifyBookingsCancelledByGym(
   })[],
 ): void {
   for (const booking of cancelled) {
-    queueEmail(() => ({
+    queueOutboxEmail("booking.cancelled", () => ({
       to: booking.email,
       ...templates.bookingCancelledByGym({
         fullName: booking.fullName,
@@ -68,7 +69,7 @@ export function notifyBookingsCancelledByGym(
 }
 
 export function notifyBoutOffered(user: Recipient, offer: BoutOffer): void {
-  queueEmail(() => ({
+  queueOutboxEmail("bout.offered", () => ({
     to: user.email,
     ...templates.boutOffered({
       fullName: user.fullName,
@@ -86,7 +87,7 @@ export function notifyEventCancelled(
   event: { name: string; eventDate: string },
 ): void {
   for (const fighter of fighters) {
-    queueEmail(() => ({
+    queueOutboxEmail("event.cancelled", () => ({
       to: fighter.email,
       ...templates.eventCancelled({
         fullName: fighter.fullName,
@@ -105,7 +106,7 @@ export function notifyDocumentReviewed(
     note: string | null;
   },
 ): void {
-  queueEmail(() => ({
+  queueOutboxEmail("document.reviewed", () => ({
     to: user.email,
     ...templates.documentReviewed({
       fullName: user.fullName,
@@ -117,17 +118,23 @@ export function notifyDocumentReviewed(
 }
 
 export function notifyPasswordReset(user: Recipient, token: string, minutesValid: number): void {
-  queueEmail(() => ({
-    to: user.email,
-    ...templates.passwordReset({ fullName: user.fullName, token, minutesValid }),
-  }));
+  queueEmail(
+    () => ({
+      to: user.email,
+      ...templates.passwordReset({ fullName: user.fullName, token, minutesValid }),
+    }),
+    countDirect("password.reset"),
+  );
 }
 
 export function notifyCoachInvite(user: Recipient, token: string, daysValid: number): void {
-  queueEmail(() => ({
-    to: user.email,
-    ...templates.coachInvite({ fullName: user.fullName, token, daysValid }),
-  }));
+  queueEmail(
+    () => ({
+      to: user.email,
+      ...templates.coachInvite({ fullName: user.fullName, token, daysValid }),
+    }),
+    countDirect("coach.invite"),
+  );
 }
 
 /**
@@ -135,11 +142,15 @@ export function notifyCoachInvite(user: Recipient, token: string, daysValid: num
  * receipt. `onGymCopy` hears whether the gym's copy went out, so the caller
  * can record it.
  */
-export function notifyEnquiry(
-  enquiry: { fullName: string; email: string; phone: string | null; message: string },
-  onGymCopy: (sent: boolean) => Promise<void>,
-): void {
-  queueEmail(
+export function notifyEnquiry(enquiry: {
+  id: number;
+  fullName: string;
+  email: string;
+  phone: string | null;
+  message: string;
+}): void {
+  queueOutboxEmail(
+    "enquiry.gym",
     () => {
       const inbox = process.env.CONTACT_INBOX?.trim();
       if (!inbox) return null;
@@ -150,11 +161,22 @@ export function notifyEnquiry(
         ...templates.enquiryToGym(enquiry),
       };
     },
-    onGymCopy,
+    { enquiryId: enquiry.id },
   );
 
-  queueEmail(() => ({
+  queueOutboxEmail("enquiry.receipt", () => ({
     to: enquiry.email,
     ...templates.enquiryReceivedAutoReply({ fullName: enquiry.fullName }),
   }));
+}
+
+/**
+ * These two carry a link with the raw token, so they are sent directly and a
+ * stored copy would be a working password reset. The send is only counted, so
+ * the daily cap on the outbox knows about it.
+ */
+function countDirect(kind: string): (sent: boolean) => Promise<void> {
+  return async (sent) => {
+    if (sent) await recordDirectSend(kind);
+  };
 }

@@ -1,6 +1,6 @@
-import { jsonResult, pathId, withSession } from "@/lib/api";
+import { jsonResult, pathId } from "@/lib/api";
+import { methodNotAllowed, userRoute } from "@/lib/apiHandler";
 import { deleteMyDocument } from "@/lib/services/documentService";
-import { assertSameOrigin } from "@/lib/origin";
 
 export const dynamic = "force-dynamic";
 
@@ -9,19 +9,14 @@ export const dynamic = "force-dynamic";
  *
  * The owner only, and only while the document is Pending or Rejected.
  */
-export async function DELETE(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> },
-) {
-  const blocked = assertSameOrigin(request);
-  if (blocked) return blocked;
+export const DELETE = userRoute(
+  {
+    name: "DELETE /api/fighter/documents/[id]",
+    failure: "Could not delete the document.",
+    limit: "documentDelete",
+  },
+  async ({ session, params }) =>
+    jsonResult(await deleteMyDocument(session, pathId((await params()).id ?? ""))),
+);
 
-  return withSession(
-    "DELETE /api/fighter/documents/[id]",
-    "Could not delete the document.",
-    async (session) => {
-      const { id } = await params;
-      return jsonResult(await deleteMyDocument(session, pathId(id)));
-    },
-  );
-}
+export const { GET, POST, PUT, PATCH } = methodNotAllowed(["DELETE"]);

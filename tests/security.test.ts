@@ -132,10 +132,10 @@ async function main() {
       results.slice(0, 5).map((r) => r.remaining),
       [4, 3, 2, 1, 0],
     );
-    assert.equal(results[5].remaining, 0);
+    assert.equal(results[5]!.remaining, 0);
     assert.ok(
-      results[5].retryAfterSeconds >= 1 && results[5].retryAfterSeconds <= 600,
-      `retry-after ${results[5].retryAfterSeconds}`,
+      results[5]!.retryAfterSeconds >= 1 && results[5]!.retryAfterSeconds <= 600,
+      `retry-after ${results[5]!.retryAfterSeconds}`,
     );
   });
 
@@ -211,6 +211,15 @@ async function main() {
       contact: "5/3600",
       booking: "30/600",
       upload: "20/3600",
+      publicRead: "120/60",
+      userRead: "120/60",
+      cancel: "30/600",
+      respond: "30/600",
+      documentDelete: "30/3600",
+      documentDownload: "60/600",
+      admin: "120/600",
+      secretRoute: "30/60",
+      signOutEverywhere: "5/3600",
     });
   });
 
@@ -250,13 +259,13 @@ async function main() {
     assert.equal(tooManyAttempts(900), "Too many attempts. Try again in 15 minutes.");
     assert.equal(
       firstDenied(
-        { allowed: false, remaining: 0, retryAfterSeconds: 30 },
-        { allowed: false, remaining: 0, retryAfterSeconds: 90 },
-        { allowed: true, remaining: 1, retryAfterSeconds: 5 },
+        { allowed: false, justExceeded: false, remaining: 0, retryAfterSeconds: 30 },
+        { allowed: false, justExceeded: false, remaining: 0, retryAfterSeconds: 90 },
+        { allowed: true, justExceeded: false, remaining: 1, retryAfterSeconds: 5 },
       )?.retryAfterSeconds,
       90,
     );
-    assert.equal(firstDenied({ allowed: true, remaining: 1, retryAfterSeconds: 5 }), null);
+    assert.equal(firstDenied({ allowed: true, justExceeded: false, remaining: 1, retryAfterSeconds: 5 }), null);
   });
 
   // ------------------------------------------------------------ forms
@@ -401,7 +410,7 @@ async function main() {
     const blocked = assertSameOrigin(withHeaders({ origin: "https://evil.example" }));
     assert.ok(blocked);
     assert.equal(blocked.status, 403);
-    assert.deepEqual(await blocked.json(), { error: { message: "Cross-origin requests are not allowed." } });
+    assert.deepEqual(await blocked.json(), { error: { message: "Cross-origin requests are not allowed.", code: "CROSS_ORIGIN" } });
   });
 
   await check("the APP_URL origin is accepted", () => {
@@ -520,6 +529,8 @@ async function main() {
   console.log("\nSTATE-CHANGING ROUTES");
 
   const routes: { file: string; method: "POST" | "PATCH" | "DELETE" }[] = [
+    { file: "account/sign-out-everywhere/route", method: "POST" },
+    { file: "admin/users/[id]/erase/route", method: "POST" },
     { file: "admin/events/route", method: "POST" },
     { file: "admin/events/[id]/route", method: "PATCH" },
     { file: "admin/events/[id]/offers/route", method: "POST" },
@@ -536,7 +547,7 @@ async function main() {
 
   await check("every state-changing route file is in this list", () => {
     const found = sourceFiles(path.join(ROOT, "src", "app", "api"))
-      .filter((f) => /export (async )?function (POST|PATCH|DELETE|PUT)\b/.test(readFileSync(f, "utf8")))
+      .filter((f) => /export (async )?function (POST|PATCH|DELETE|PUT)\b|export const (POST|PATCH|DELETE|PUT) = (userRoute|publicRoute)\(/.test(readFileSync(f, "utf8")))
       .map((f) => path.relative(path.join(ROOT, "src", "app", "api"), f).replace(/\\/g, "/").replace(/\.ts$/, ""))
       .sort();
 
@@ -547,8 +558,8 @@ async function main() {
 
   async function call(file: string, method: string, headers: Record<string, string>): Promise<Response> {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const module = require(`../src/app/api/${file}`) as Record<string, Handler>;
-    return module[method](
+    const routeModule = require(`../src/app/api/${file}`) as Record<string, Handler>;
+    return routeModule[method]!(
       new Request(`${APP}/api/${file}`, { method, headers: { "content-type": "application/json", ...headers }, body: method === "DELETE" ? undefined : "{}" }),
       { params: Promise.resolve({ id: "1" }) },
     );
@@ -561,7 +572,7 @@ async function main() {
       for (const headers of [{ origin: "https://evil.example" }, {}] as Record<string, string>[]) {
         const response = await call(file, method, headers);
         assert.equal(response.status, 403, JSON.stringify(headers));
-        assert.deepEqual(await response.json(), { error: { message: "Cross-origin requests are not allowed." } });
+        assert.deepEqual(await response.json(), { error: { message: "Cross-origin requests are not allowed.", code: "CROSS_ORIGIN", requestId: response.headers.get("x-request-id") } });
       }
     });
 
@@ -595,8 +606,8 @@ async function main() {
 
   await check("POST /api/bookings reads its body with readJson (wrong type is 415)", async () => {
     await createSession(await sessionFor("fighter@pfc.co.za"));
-    const module = bookingsRoute as unknown as Record<string, Handler>;
-    const response = await module.POST(
+    const routeModule = bookingsRoute as unknown as Record<string, Handler>;
+    const response = await routeModule.POST!(
       new Request(`${APP}/api/bookings`, { method: "POST", headers: { origin: APP, "content-type": "text/plain" }, body: "{}" }),
       { params: Promise.resolve({ id: "1" }) },
     );
@@ -615,15 +626,15 @@ async function main() {
     assert.equal(ready.dynamic, "force-dynamic");
 
     // With the database down the shallow check still answers.
-    const liveDown = await withDatabaseDown(async () => live.GET());
+    const liveDown = await withDatabaseDown(async () => live.GET(new Request("http://localhost/api/test")));
     assert.equal(liveDown.status, 200);
     assert.deepEqual(await liveDown.json(), { status: "ok" });
 
-    const up = await ready.GET();
+    const up = await ready.GET(new Request("http://localhost/api/test"));
     assert.equal(up.status, 200);
     assert.deepEqual(await up.json(), { status: "ok" });
 
-    const down = await withDatabaseDown(() => ready.GET());
+    const down = await withDatabaseDown(() => ready.GET(new Request("http://localhost/api/test")));
     assert.equal(down.status, 503);
     assert.deepEqual(await down.json(), { status: "unavailable" });
   });
@@ -795,6 +806,8 @@ async function main() {
       "X-Content-Type-Options": "nosniff",
       "Referrer-Policy": "strict-origin-when-cross-origin",
       "X-Frame-Options": "DENY",
+      "Cross-Origin-Opener-Policy": "same-origin",
+      "Cross-Origin-Resource-Policy": "same-origin",
       "Permissions-Policy": "camera=(), microphone=(), geolocation=(), payment=()",
     });
 

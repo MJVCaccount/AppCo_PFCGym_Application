@@ -15,6 +15,18 @@ name: Deploy
 # next; stop using a column in one release and drop it in the one after.
 # Never rename or drop something the running release still reads.
 #
+# MIGRATIONS ARE FORWARD-ONLY. There is no "down" migration. A rollback puts the
+# previous CODE back and leaves the database on the newer schema, which is safe
+# only because of the rule above: the previous release must run against it.
+#
+# PRODUCTION ROLLS ITSELF BACK. Before anything changes, the id of the live
+# production deployment is recorded. If the smoke test fails, that deployment is
+# promoted back through the Vercel REST API (scripts/ci/vercel-rollback.mjs; the
+# CLI cannot be used because the deployment token has no user record, so some
+# CLI commands fail with "User not found"), readiness is verified on the
+# production domain, and the job then fails with a summary. To rehearse this by
+# hand, run the "Rollback drill" workflow.
+#
 # Note: GitHub runs a workflow_run workflow from the default branch, so this
 # file must be on main before a push to develop can trigger a preview.
 on:
@@ -32,10 +44,8 @@ concurrency:
   group: deploy-${{ github.event.workflow_run.head_branch }}
   cancel-in-progress: false
 
-env:
-  VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-  VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
-
+# The Vercel team and project ids are set per job below, not for the whole
+# workflow, so they reach only the steps of the jobs that use them.
 jobs:
   production:
     if: >-
@@ -44,13 +54,21 @@ jobs:
       github.event.workflow_run.head_branch == 'main'
     runs-on: ubuntu-latest
     environment: production
+    env:
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
     steps:
-      - uses: actions/checkout@v4
+      # Reviewed (Semgrep flags every workflow_run checkout): this job runs only for a
+      # PUSH to our own protected branch whose CI run succeeded (see the job's `if`), never
+      # for a pull request or a fork, so the commit checked out here is code that has
+      # already been merged.
+      # nosemgrep: yaml.github-actions.security.workflow-run-target-code-checkout.workflow-run-target-code-checkout
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           # The exact commit CI passed on, not whatever main is by now.
           ref: ${{ github.event.workflow_run.head_sha }}
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 20
           cache: npm
@@ -69,6 +87,18 @@ jobs:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: vercel build --prod --token="$VERCEL_TOKEN"
 
+      # What to go back to. Read before anything changes. If it cannot be read
+      # the deploy still goes ahead, but the summary says a rollback was not
+      # possible.
+      - name: Record the production deployment that is live now
+        id: previous
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          id="$(node scripts/ci/vercel-rollback.mjs current || true)"
+          echo "id=$id" >> "$GITHUB_OUTPUT"
+          echo "Live before this deploy: ${id:-unknown}"
+
       # Before the new code goes live; see the note at the top of this file.
       - name: Apply database migrations
         env:
@@ -85,7 +115,11 @@ jobs:
           echo "url=$url" >> "$GITHUB_OUTPUT"
           echo "Deployed to $url"
 
+      # continue-on-error so the rollback below can run; the final step fails
+      # the job when this one failed.
       - name: Smoke test
+        id: smoke
+        continue-on-error: true
         env:
           DEPLOYMENT_URL: ${{ steps.deploy.outputs.url }}
           BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
@@ -96,11 +130,59 @@ jobs:
           if [ -n "$BYPASS_SECRET" ]; then
             printf 'x-vercel-protection-bypass: %s\n' "$BYPASS_SECRET" > headers.txt
           fi
+          status=0
           curl --fail --silent --show-error \
             --retry 6 --retry-delay 10 --retry-all-errors \
             -H @headers.txt \
-            "$DEPLOYMENT_URL/api/health/ready"
+            "$DEPLOYMENT_URL/api/health/ready" || status=$?
           rm -f headers.txt
+          exit $status
+
+      - name: Roll back to the previous production deployment
+        id: rollback
+        if: steps.smoke.outcome == 'failure' && steps.previous.outputs.id != ''
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+          PREVIOUS_ID: ${{ steps.previous.outputs.id }}
+        run: node scripts/ci/vercel-rollback.mjs rollback "$PREVIOUS_ID"
+
+      - name: Summary
+        if: always()
+        env:
+          DEPLOYMENT_URL: ${{ steps.deploy.outputs.url }}
+          PREVIOUS_ID: ${{ steps.previous.outputs.id }}
+          SMOKE: ${{ steps.smoke.outcome }}
+          ROLLBACK: ${{ steps.rollback.outcome }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          {
+            echo "## Production deploy"
+            echo
+            echo "| | |"
+            echo "| --- | --- |"
+            echo "| Commit | \`${SHA:0:7}\` |"
+            echo "| New deployment | ${DEPLOYMENT_URL:-none} |"
+            echo "| Live before | \`${PREVIOUS_ID:-unknown}\` |"
+            echo "| Smoke test (/api/health/ready) | ${SMOKE:-skipped} |"
+            echo "| Rollback | ${ROLLBACK:-not needed} |"
+            echo
+            if [ "$SMOKE" = "failure" ] && [ "$ROLLBACK" = "success" ]; then
+              echo "**The smoke test failed. The previous deployment was promoted back and is ready.** Database migrations are forward-only and stay applied; the previous code runs against them by design."
+            elif [ "$SMOKE" = "failure" ]; then
+              echo "**The smoke test failed and the rollback did not complete. Production needs attention now.** Promote \`${PREVIOUS_ID:-<previous id>}\` by hand: see docs/OPERATIONS.md."
+            else
+              echo "The smoke test passed."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Fail the job if the release was rolled back
+        if: steps.smoke.outcome == 'failure'
+        env:
+          ROLLBACK: ${{ steps.rollback.outcome }}
+        run: |
+          echo "::error::Smoke test failed. Rollback: ${ROLLBACK:-not possible (no previous deployment id)}."
+          exit 1
 
   preview:
     if: >-
@@ -108,12 +190,20 @@ jobs:
       github.event.workflow_run.event == 'push' &&
       github.event.workflow_run.head_branch == 'develop'
     runs-on: ubuntu-latest
+    env:
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
     steps:
-      - uses: actions/checkout@v4
+      # Reviewed (Semgrep flags every workflow_run checkout): this job runs only for a
+      # PUSH to our own protected branch whose CI run succeeded (see the job's `if`), never
+      # for a pull request or a fork, so the commit checked out here is code that has
+      # already been merged.
+      # nosemgrep: yaml.github-actions.security.workflow-run-target-code-checkout.workflow-run-target-code-checkout
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           ref: ${{ github.event.workflow_run.head_sha }}
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 20
           cache: npm

@@ -26,6 +26,7 @@ import {
 import { uploadPublicImage } from "../src/lib/services/imageService";
 import { createSession, destroySession } from "../src/lib/session";
 import type { SessionUser } from "../src/lib/types";
+import { jpegHead, padded, pngHead, webpHead } from "./support/files";
 import {
   contentDisposition,
   contentTypeForPathname,
@@ -65,19 +66,12 @@ async function sessionFor(email: string): Promise<SessionUser> {
 // ---------------------------------------------------------------- fixtures
 
 const PDF_HEAD = Buffer.from("%PDF-1.7\n");
-const JPEG_HEAD = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0, 0x10, 0x4a, 0x46, 0x49, 0x46]);
-const PNG_HEAD = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
-const WEBP_HEAD = Buffer.concat([
-  Buffer.from("RIFF"),
-  Buffer.from([0x24, 0, 0, 0]),
-  Buffer.from("WEBPVP8 "),
-]);
+const JPEG_HEAD = jpegHead();
+const PNG_HEAD = pngHead();
+const WEBP_HEAD = webpHead();
 
 function pdf(totalBytes = 200): Buffer {
   return Buffer.concat([PDF_HEAD, Buffer.alloc(Math.max(0, totalBytes - PDF_HEAD.length), 0x20)]);
-}
-function padded(head: Buffer, totalBytes: number): Buffer {
-  return Buffer.concat([head, Buffer.alloc(Math.max(0, totalBytes - head.length), 1)]);
 }
 
 function multipart(
@@ -268,10 +262,10 @@ async function main() {
 
     assert.equal(blob.blobs.size, 1);
     const [pathname] = [...blob.blobs.keys()];
-    assert.match(pathname, new RegExp(`^fighter-docs/${fighter.id}/[0-9a-f-]{36}\\.pdf$`));
-    assert.ok(!pathname.toLowerCase().includes("medical"), "no client filename in the path");
-    assert.equal((pathname.match(/\./g) ?? []).length, 1, "one dot: no '..'");
-    assert.ok(!pathname.includes(".."));
+    assert.match(pathname!, new RegExp(`^fighter-docs/${fighter.id}/[0-9a-f-]{36}\\.pdf$`));
+    assert.ok(!pathname!.toLowerCase().includes("medical"), "no client filename in the path");
+    assert.equal((pathname!.match(/\./g) ?? []).length, 1, "one dot: no '..'");
+    assert.ok(!pathname!.includes(".."));
 
     const put = blob.calls.find((c) => c.fn === "put")!;
     assert.equal(put.options.access, "private");
@@ -440,8 +434,8 @@ async function main() {
     assert.equal(rejected.data!.status, "Rejected");
     assert.equal(rejected.data!.reviewNote, "The scan is cut off.");
     assert.equal(resend.outbox.length, 1);
-    assert.equal(resend.outbox[0].to, fighter.email);
-    assert.match(resend.outbox[0].subject, /rejected/);
+    assert.equal(resend.outbox[0]!.to, fighter.email);
+    assert.match(resend.outbox[0]!.subject, /rejected/);
 
     assert.equal((await reviewDocument(admin, ownDocumentId, "Rejected", "again")).status, 409, "no duplicate email");
     assert.equal(
@@ -497,16 +491,16 @@ async function main() {
 
   await check("a failed blob delete is logged but the row is still removed", async () => {
     const [pending] = await listMyDocuments(fighter).then((r) => r.data!.filter((d) => d.status === "Pending"));
-    const pathname = (await testDb.fighterDocument.findUniqueOrThrow({ where: { id: pending.id } })).fileUrl;
+    const pathname = (await testDb.fighterDocument.findUniqueOrThrow({ where: { id: pending!.id } })).fileUrl;
 
     blob.failDelete = true;
     try {
-      const result = await deleteMyDocument(fighter, pending.id);
+      const result = await deleteMyDocument(fighter, pending!.id);
       assert.equal(result.ok, true);
     } finally {
       blob.failDelete = false;
     }
-    assert.equal(await testDb.fighterDocument.count({ where: { id: pending.id } }), 0);
+    assert.equal(await testDb.fighterDocument.count({ where: { id: pending!.id } }), 0);
     assert.ok(blob.blobs.has(pathname), "the orphaned blob is left for a clean-up (it was logged)");
   });
 
