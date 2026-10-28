@@ -29,7 +29,7 @@ Times are Cape Town (UTC+2), 2026-10-05, taken from GitHub and git timestamps (s
 ### (earlier) VERCEL_TOKEN replaced, env vars re-added as non-sensitive
 - What: new token set as GitHub secret VERCEL_TOKEN (printf, no newline). The 8 Production and 8 Preview variables re-added with `vercel env add NAME <env> --force --no-sensitive`. Verified by `vercel pull` in a temp folder (no placeholders); temp folder deleted.
 - Affected: GitHub, Vercel.
-### (earlier) Deploy run 37236614716 re-run (attempt 3), approved by the user
+### (earlier) Deploy run 37236614716 re-run (attempt 3), approved by the repository owner
 - Result: pull, build, `prisma migrate deploy` (production database, 5 migrations) and deploy passed. Smoke failed: /api/health/ready returned 503. Runtime logs: Prisma query engine for rhel-openssl-3.0.x not found.
 - Affected: Neon production (migrations), Vercel.
 

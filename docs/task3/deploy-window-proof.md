@@ -47,7 +47,7 @@ Both are rare and both end in a generic error with the data unchanged, but they 
 ## Decision
 
 * The constraints migration **stays in `docs/task3/pending-migrations/`**. Moving it into `prisma/migrations` now would make the next deploy return those two 500s to anyone hitting them during the window, and would fail the old suite.
-* **To release it:** deploy the current work first; once it is live, copy the file to `prisma/migrations/<a later timestamp>_integrity_constraints/migration.sql` and commit that alone. The current code fixes both flows (tested in `tests/integrity.test.ts`) and passes the whole suite with the constraints applied (shown in round 1).
+* **To release it:** deploy the current work first; once it is live, copy the file to `prisma/migrations/<a later timestamp>_integrity_constraints/migration.sql` and commit that alone. The current code fixes both flows (tested in `tests/integrity.test.ts`) and passes the whole suite with the constraints applied (shown in the earlier work).
 * The pending file now adds each constraint `NOT VALID` and then runs `VALIDATE CONSTRAINT`, which takes a lighter lock for the long part, and starts with `lock_timeout` and `statement_timeout`.
 
 ## Not covered
