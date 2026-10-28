@@ -4,3 +4,9 @@
 # ("S3cretPassw0rdDoNotLeak") used to prove the seed guard never prints a
 # password. It opens nothing.
 c9224cdaa2c2aeb86bafd82b3f19e9e0cd553405:tests/seed-guard.test.ts:generic-api-key:10
+
+# tools/pentest/attack.ts: throwaway wrong password used by the brute-force
+# and timing checks; opens nothing.
+9f5b9a8b2a9256402c9e89816c6d24acc599667b:tools/pentest/attack.ts:generic-api-key:465
+9f5b9a8b2a9256402c9e89816c6d24acc599667b:tools/pentest/attack.ts:generic-api-key:466
+9f5b9a8b2a9256402c9e89816c6d24acc599667b:tools/pentest/attack.ts:generic-api-key:473
