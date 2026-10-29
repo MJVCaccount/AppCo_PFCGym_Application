@@ -42,7 +42,7 @@ jobs:
         id: drill
         run: |
           set -o pipefail
-          node scripts/ci/vercel-rollback.mjs drill | tee drill.txt
+          node scripts/ci/vercel-rollback.mjs drill 2>&1 | tee drill.txt
 
       - name: Summary
         if: always()
@@ -54,7 +54,22 @@ jobs:
             echo
             echo "Outcome: $DRILL_OUTCOME"
             echo
-            echo '```'
-            cat drill.txt 2>/dev/null || echo "(no output)"
-            echo '```'
+            if [ -s drill.txt ]; then
+              echo '```'
+              cat drill.txt
+              echo '```'
+            else
+              echo "The drill produced no output."
+            fi
+            if [ "$DRILL_OUTCOME" != "success" ]; then
+              LIVE_BEFORE=$(grep -oE 'live now: dpl_[A-Za-z0-9]+' drill.txt 2>/dev/null | head -1 | cut -d' ' -f3)
+              echo
+              echo "**The drill did not finish. Production may be serving the older release.**"
+              if [ -n "$LIVE_BEFORE" ]; then
+                echo "Live before the drill: $LIVE_BEFORE"
+                echo "Restore it with: vercel promote $LIVE_BEFORE --yes"
+              else
+                echo "The deployment that was live before the drill is not known. Find it under Deployments in Vercel and promote it."
+              fi
+            fi
           } >> "$GITHUB_STEP_SUMMARY"

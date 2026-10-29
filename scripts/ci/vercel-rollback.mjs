@@ -44,8 +44,16 @@ function required(env, name) {
   return value;
 }
 
-/** @param {Record<string, string | undefined>} [env] */
-export function client(env = process.env) {
+// Vercel answers a promotion with 409 while the previous one is still settling.
+const PROMOTE_RETRIES = 6;
+const PROMOTE_WAIT_MS = 5000;
+const MAX_RETRY_AFTER_MS = 30000;
+
+/**
+ * @param {Record<string, string | undefined>} [env]
+ * @param {{ sleep?: (ms: number) => Promise<void> }} [options]
+ */
+export function client(env = process.env, { sleep: wait = sleep } = {}) {
   const base = apiBase(env);
   const token = required(env, "VERCEL_TOKEN");
   const projectId = required(env, "VERCEL_PROJECT_ID");
@@ -68,7 +76,12 @@ export function client(env = process.env) {
       } catch {
         // not JSON
       }
-      throw new Error(`Vercel API ${method} ${path.split("?")[0]} answered ${response.status}${code ? ` (${code})` : ""}.`);
+      // Only the status and Vercel's error code are kept: never a body or a token.
+      const error = new Error(`Vercel API ${method} ${path.split("?")[0]} answered ${response.status}${code ? ` (${code})` : ""}.`);
+      error.status = response.status;
+      const seconds = Number(response.headers.get("retry-after"));
+      error.retryAfterMs = Number.isFinite(seconds) && seconds > 0 ? Math.min(seconds * 1000, MAX_RETRY_AFTER_MS) : null;
+      throw error;
     }
     return response.status === 204 ? {} : response.json().catch(() => ({}));
   }
@@ -93,8 +106,17 @@ export function client(env = process.env) {
       return (data.deployments ?? []).map((d) => ({ id: d.uid, url: d.url, created: d.created }));
     },
 
+    /** A 409 is retried up to PROMOTE_RETRIES times; every other failure is final. */
     async promote(deploymentId) {
-      await request("POST", `/v10/projects/${projectId}/promote/${encodeURIComponent(deploymentId)}`);
+      for (let retry = 0; ; retry++) {
+        try {
+          await request("POST", `/v10/projects/${projectId}/promote/${encodeURIComponent(deploymentId)}`);
+          return;
+        } catch (error) {
+          if (error.status !== 409 || retry >= PROMOTE_RETRIES) throw error;
+          await wait(error.retryAfterMs ?? PROMOTE_WAIT_MS);
+        }
+      }
     },
   };
 }
