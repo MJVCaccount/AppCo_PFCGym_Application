@@ -1,7 +1,7 @@
 %% Source: .github/workflows/ci.yml, deploy.yml, monitor.yml, rollback-drill.yml, codeql.yml, scripts/ci/*.mjs, vercel.json (git deployment disabled).
-%% Not in the repository, so not verified: branch protection rules (proposed in docs/task3/branch-protection.md, not applied), and the required reviewer on the
+%% Not in the repository, but read back from GitHub on 29 October 2026: branch protection rules (applied on main and develop, see docs/task3/branch-protection.md), and the required reviewer on the
 %% "production" GitHub Environment (deploy.yml names the environment; the approval is a GitHub setting).
-%% The monitoring, rollback, drain and scan workflows have not run on GitHub yet; they take effect when committed.
+%% The monitoring, rollback, drain and scan workflows have all run on GitHub.
 %% Every `uses:` is pinned to a full commit SHA.
 flowchart TD
     PR["Pull request to develop or main"] --> CI
