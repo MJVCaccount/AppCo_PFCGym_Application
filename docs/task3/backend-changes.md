@@ -84,7 +84,7 @@ Measured with `EXPLAIN (ANALYZE)` on a throwaway database holding 10,033 users, 
 * `monitor.yml` checks production every 15 minutes (readiness, response time, and with a token the health-detail thresholds) and keeps one incident issue. `outbox-drain.yml` asks production to retry due emails hourly.
 * `ci.yml` runs the tests on Node 20 and 24, checks migration drift, seeds and runs `db:verify`, runs coverage on Node 24, lints the OpenAPI spec, and runs `gitleaks` and `semgrep`. `codeql.yml` and `dependency-review.yml` are separate workflows.
 * Every `uses:` in every workflow is pinned to a full commit SHA with the tag in a comment; a test fails on an unpinned action. Dependabot covers npm and GitHub Actions with a 7-day cooldown. The Vercel ids are scoped to the jobs that use them.
-* Branch protection is proposed in [branch-protection.md](branch-protection.md), not applied.
+* Branch protection is applied on `main` and `develop`; the settings are in [branch-protection.md](branch-protection.md).
 
 ### Property tests and load test
 
@@ -99,8 +99,8 @@ Measured with `EXPLAIN (ANALYZE)` on a throwaway database holding 10,033 users, 
 
 ## Known limits: what is not verified
 
-* **The new GitHub workflows have not run on GitHub.** They pass `actionlint` and structural tests, and the rollback script was tested against a fake Vercel API, but the first real runs happen after the files are merged. The Gitleaks job sets `safe.directory` through the environment, which was only exercised on a Windows bind mount. The dependency review needs GitHub's dependency graph.
-* **Nothing was run against Vercel, Neon, Resend or Blob.** Behaviour against the real providers is unverified; Neon allowing `CREATE EXTENSION pg_trgm` on this project is unconfirmed.
+* **The new GitHub workflows have now run on GitHub.** Monitor, Outbox drain, CodeQL, Semgrep, gitleaks and Dependency review have all run. They also pass `actionlint` and structural tests, and the rollback script was tested against a fake Vercel API. The Gitleaks job sets `safe.directory` through the environment, which was only exercised on a Windows bind mount locally. Dependency review fails because the repository's dependency graph is switched off; it is not a required check.
+* **Real email delivery and file uploads are not verified.** Deploys, migrations, health checks and the rollback drill have run against Vercel and Neon on production. All 7 migrations are applied there, including `20261027120100_member_search_trigram`, so Neon allowed `CREATE EXTENSION pg_trgm` and the trigram indexes were created (inferred from the applied migration; the index list itself was not queried). The sender is the Resend sandbox address, which reaches only the owner's address, so delivery to members is unverified. The Blob stores are configured on production but uploads were not exercised there.
 * **The constraints migration has never been applied to real data.**
 * **Load figures are local and relative:** one desktop for server, database and load generator, no TLS, no Neon, no Vercel cold starts, rate limits relaxed twentyfold. They say nothing about the deployed site's absolute performance.
 * **Semgrep's registry packs change over time**, so a clean run can turn red later.
@@ -119,7 +119,7 @@ Environment variables (see `.env.example` and [../OPERATIONS.md](../OPERATIONS.m
 | `EMAIL_DAILY_CAP`, `SLOW_QUERY_MS`, `SECURITY_CONTACT`, `API_ACCESS_LOG` | optional | Defaults are 90, 500 ms, the contact inbox, and logging on |
 | `PRODUCTION_URL` | GitHub repository variable | Used by the monitor and the Outbox drain |
 
-First-run order (full text in OPERATIONS): set `CRON_SECRET` and `HEALTH_TOKEN` in Vercel, deploy, call `/api/cron/maintenance` once with the bearer token, then add `HEALTH_TOKEN` and `CRON_SECRET` to GitHub, run the Monitor and Outbox drain workflows once, and run the Rollback drill once.
+First-run order for a new environment (full text in OPERATIONS; the current production has been through it): set `CRON_SECRET` and `HEALTH_TOKEN` in Vercel, deploy, call `/api/cron/maintenance` once with the bearer token, then add `HEALTH_TOKEN` and `CRON_SECRET` to GitHub, run the Monitor and Outbox drain workflows once, and run the Rollback drill once.
 
 Release order for the held-back migration: deploy this work, let it run stable, then add `docs/task3/pending-migrations/20261027120000_integrity_constraints.sql` as its own migration with a later timestamp.
 

@@ -15,12 +15,16 @@ actions and JSON routes, deployed to Vercel by GitHub Actions.
 
 https://pfc-gym.vercel.app
 
-## Demo Logins
+The deployed site uses its own passwords for the demo accounts. They are not published in this repository.
 
-- Admin: admin@pfc.co.za / PfcAdmin-Cobalt-7391-Ring
-- Member: member@pfc.co.za / PfcDemo-Harbor-4826-Glove
-- Fighter: fighter@pfc.co.za / PfcDemo-Harbor-4826-Glove
-- Coach: marcus@pfc.co.za or sofia@pfc.co.za / PfcDemo-Harbor-4826-Glove
+## Demo logins (local and dev only)
+
+These logins work only on localhost and the dev database, seeded with the published passwords. They do not work on the deployed site. See "Demo accounts" below for how the seed treats a hosted database.
+
+- Admin: admin@pfc.co.za / Admin123!
+- Member: member@pfc.co.za / Member123!
+- Fighter: fighter@pfc.co.za / Fighter123!
+- Coach: marcus@pfc.co.za or sofia@pfc.co.za / Coach123!
 
 ## Presentation Youtube Link
 

@@ -7,7 +7,8 @@ name: Dependency review
 #
 # Kept in its own workflow, and NOT in the list of required checks, so that a
 # repository without the dependency graph does not get every pull request
-# blocked. It has not run yet; see docs/task3/pentest-report.md.
+# blocked. It runs on pull requests, fails until the repository's dependency
+# graph is enabled, and is not a required check; see docs/task3/pentest-report.md.
 on:
   pull_request:
     branches: [develop, main]

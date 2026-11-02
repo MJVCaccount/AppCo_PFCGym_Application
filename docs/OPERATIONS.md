@@ -103,7 +103,9 @@ command only), and `SMOKE_BYPASS_SECRET`.
 `HEALTH_TOKEN` and `CRON_SECRET` switch on three routes (`/api/health/detail`,
 `/api/cron/maintenance`, `/api/cron/outbox`) and three workflows. Switched on in
 the wrong order, the monitor opens an incident issue for something that is not
-broken. Follow this order:
+broken. These steps are for a fresh setup of a new environment. On the current
+production they are done: the daily cron has run, and the Rollback drill passed
+both halves on 29 October 2026. Follow this order on a new environment:
 
 1. **Vercel, Production** (and Preview if they should run there): set `CRON_SECRET`
    and `HEALTH_TOKEN`, each at least 32 random characters, from stdin so the value
@@ -117,8 +119,8 @@ broken. Follow this order:
    curl -s -H "Authorization: Bearer $CRON_SECRET" https://<production domain>/api/cron/maintenance
    ```
    Expect `{"data":{... "failed":[]}}`. This writes the first `maintenance.run` audit
-   row. Without it the monitor says "The maintenance job has never run." because the
-   daily Vercel cron has not fired yet.
+   row. On a new environment, without it the monitor says "The maintenance job has
+   never run." until the daily Vercel cron has fired for the first time.
 4. **Only then add `HEALTH_TOKEN` to GitHub** (Settings, Secrets and variables,
    Actions), together with the variable `PRODUCTION_URL` and the secret
    `CRON_SECRET` for the Outbox drain. Until step 4 the monitor checks readiness only.
